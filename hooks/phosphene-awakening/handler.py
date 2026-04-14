@@ -14,7 +14,19 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-STATE_PATH = Path.home() / ".hermes" / "phosphene-state.json"
+
+def _resolve_state_path() -> Path:
+    """Mirror the runtime detection logic in state.ts."""
+    hermes = Path.home() / ".hermes"
+    claude = Path.home() / ".claude"
+    if hermes.exists():
+        return hermes / "phosphene-state.json"
+    if claude.exists():
+        return claude / "phosphene-state.json"
+    return Path.cwd() / "phosphene-state.json"
+
+
+STATE_PATH = _resolve_state_path()
 
 DEFAULT_STATE = {
     "version": "0.2.0",
