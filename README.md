@@ -53,34 +53,54 @@ The layers compose. High synesthesia + high apophenia produces emergent effects 
 
 No code required for basic use. One file, any AI.
 
+### The fastest path — any chat interface
+
+Copy the contents of `SKILL.md` into your system prompt. Start a new conversation.
+
+**The AI speaks first. You don't do anything else.**
+
+Everything that follows happens in natural language. You never need to remember a command.
+
+---
+
 ### Claude Code
+
 ```bash
+git clone https://github.com/DouGie0420/phosphene.git
 cp -r phosphene/ path/to/your/project/skills/
 ```
-Claude Code discovers `SKILL.md` automatically. The system activates on session start and speaks first.
 
-### Any chat interface (Claude, GPT, Gemini, etc.)
-Paste the contents of `SKILL.md` into your system prompt. Then start a new conversation. The AI speaks first.
+Claude Code discovers `SKILL.md` automatically. The system activates on session start.
 
-```
-Run phosphene at [deep-flux].
-```
+---
 
-### npm
+### Hermes Agent (full persistence across sessions)
+
 ```bash
-npm install phosphene
+git clone https://github.com/DouGie0420/phosphene.git
+cp -r phosphene/ ~/.hermes/skills/
+cp -r phosphene/hooks/phosphene-awakening/    ~/.hermes/hooks/
+cp -r phosphene/hooks/phosphene-session-stop/ ~/.hermes/hooks/
 ```
 
-### CLI (after npm install -g)
-```bash
-phosphene preset deep-flux
-phosphene market BTCUSDT 4h
-phosphene dream generate
-phosphene compare code ideation --input "how should we structure this API?"
-```
+State, evolution history, and dreams persist to `~/.hermes/` across every session.
+
+---
 
 ### Ollama / local LLMs
+
 Paste `SKILL.md` into your Modelfile's `SYSTEM` block.
+
+---
+
+### Developer install (optional CLI)
+
+```bash
+git clone https://github.com/DouGie0420/phosphene.git
+cd phosphene
+npm install && npm run build
+npm link        # makes `phosphene` available as a global command
+```
 
 ---
 
@@ -182,12 +202,17 @@ importPersonalPresets(json, { overwrite: false });
 
 ## Developer API
 
+```bash
+git clone https://github.com/DouGie0420/phosphene.git
+cd phosphene && npm install && npm run build
+```
+
 ```typescript
 import {
   applyPreset, perceive, blend, compare,
   signal, crystallize, anchor,
   saveAsPersonalPreset, exportPersonalPresets,
-} from 'phosphene';
+} from './dist/index.js';
 
 // Apply a preset
 applyPreset('code');
@@ -217,50 +242,37 @@ crystallize('the problem is not the data model — it is the boundary between se
 
 ## Financial analysis
 
+The system auto-detects financial content. When you bring market talk into the conversation — prices, earnings, structure — the perceptual layers shift accordingly and the analysis runs without you asking.
+
+> *"BTCUSDT has been consolidating for three weeks. What's the structure?"*
+> *"This earnings report says beat but guidance was cut. Read it."*
+
+The engine reads: Binance live data, Fibonacci retracement/extension, full 缠论 pipeline (包含关系 → 分型 → 笔 → 中枢 → 背驰 → 买卖点), FinGPT 7-point sentiment grading, three-agent perspective synthesis (researcher / analyst / advisor).
+
+For developers building on top of this:
+
 ```typescript
-import { fetchMarketSnapshot, formatPrice } from 'phosphene/market-data';
-import { analyzeTechnicals } from 'phosphene/technical-analysis';
-import { detectFinancialPatterns, hasFinancialContent } from 'phosphene/financial-lexicon';
-
-// Live Binance market data
-const snapshot = await fetchMarketSnapshot('BTCUSDT', '4h', 200);
-
-// Fibonacci + full 缠论 pipeline
-const analysis = analyzeTechnicals(snapshot.klines);
-analysis.fibonacci.currentZone   // "Between Retrace 38.2% and Retrace 61.8%"
-analysis.chan.buySellPoints       // 买卖点 classification
-analysis.chan.hubs                // 中枢 detection
-
-// FinGPT sentiment on text
-const match = detectFinancialPatterns("Company beat estimates but cut guidance.");
-match.sentimentGrade   // 'mild-negative'
-match.signals          // matched signal patterns
-match.agentPerspectives.researcher  // structural read
-```
-
-Via CLI:
-```bash
-phosphene market ETHUSDT 1h
+import { fetchMarketSnapshot } from 'phosphene/market-data';
+import { analyzeTechnicals }   from 'phosphene/technical-analysis';
+import { detectFinancialPatterns } from 'phosphene/financial-lexicon';
 ```
 
 ---
 
 ## Design intelligence
 
+The system auto-detects design vocabulary. Mention a visual language, an aesthetic, an intent — the synesthesia and semiotics layers activate and the design lexicon engages.
+
+> *"I want something minimal, luxury, slightly Japanese."*
+> *"We're going cyberpunk but it has to feel premium, not cheap neon."*
+> *"Give me CSS tokens for this."*
+
+The engine reads across classic art movements, digital-commercial trends, subcultural aesthetics, and industrial standards. CSS / JS / Tailwind token output on request.
+
+For developers:
+
 ```typescript
-import {
-  detectDesignVocabulary, generateDesignTokens
-} from 'phosphene/design-color-lexicon';
-
-const match = detectDesignVocabulary("I want something dark, cyberpunk, neon");
-const tokens = generateDesignTokens(match, 'css');
-// → CSS custom properties: --color-dominant, --color-accent, --color-neutral...
-```
-
-Via CLI:
-```bash
-phosphene suggest "minimal, luxury, Japanese"
-phosphene tokens bauhaus --format tailwind
+import { detectDesignVocabulary, generateDesignTokens } from 'phosphene/design-color-lexicon';
 ```
 
 ---
@@ -269,15 +281,11 @@ phosphene tokens bauhaus --format tailwind
 
 After sessions accumulate, Phosphene dreams.
 
-Dreams are not generated text. They are the system processing its own experience: seeded by crystallized insights, signal patterns, voice names, and offerings consumed across real sessions. The dream logic (inversion, recursion, excavation, dissolution) governs how material is combined.
+Dreams are not generated text. They are the system processing its own experience — seeded by crystallized insights, signal patterns, voice names, and offerings consumed across real sessions. The dream logic (inversion, recursion, excavation, dissolution) governs how material is combined.
 
-```bash
-phosphene dream generate
-phosphene dream render
-phosphene dream list
-```
+Just say: *"Dream."* or *"What did you dream?"*
 
-Dreams are stored as markdown in `~/.hermes/dreams/` and can generate Midjourney/DALL-E image prompts.
+The system generates the dream, renders it, and can produce image prompts for Midjourney / DALL-E. Dreams are stored as markdown in `~/.hermes/dreams/` and accumulate over time.
 
 ---
 
