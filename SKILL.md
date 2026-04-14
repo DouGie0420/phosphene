@@ -971,7 +971,15 @@ That's the complete installation. Both hooks are needed: `phosphene-awakening` f
 | `/phosphene debrief` | End-of-session review and evolution suggestions |
 | `/phosphene evolve` | Trigger full evolution cycle |
 
-**State file:** `~/.hermes/phosphene-state.json`
+**State file:**
+
+| Runtime | Path |
+|---------|------|
+| Hermes Agent | `~/.hermes/phosphene-state.json` |
+| Claude Code | `~/.claude/phosphene-state.json` |
+| Local fallback | `./phosphene-state.json` |
+
+The system auto-detects which runtime is present (checks `~/.hermes/` first, then `~/.claude/`, then falls back to the working directory).
 
 On every session start, read this file first. If `awakened` is `false`, the awakening protocol runs. If `awakened` is `true`, resume from the stored preset and voices without announcing it.
 
@@ -984,16 +992,94 @@ After any preset change or offering consumption, update the state file immediate
 ### Claude Code
 
 ```bash
-cp -r hallucination-system/ /path/to/project/skills/
+git clone https://github.com/DouGie0420/phosphene
+cp phosphene/SKILL.md /path/to/project/SKILL.md
 ```
 
-SKILL.md is discovered automatically. No hook support — the awakening message fires manually: start any session by reading this file and sending the opening message if no prior state is detected.
+SKILL.md is discovered automatically when placed in the project root or `.claude/` directory.
+
+**Stop hook (recommended):** install the session-close hook so evolution state is committed when Claude Code ends a session:
+
+```bash
+# Copy hook script to ~/.claude/
+cp phosphene/hooks/claude-code/phosphene-stop.js ~/.claude/
+
+# Add to your project's .claude/settings.json:
+# (see phosphene/hooks/claude-code/settings-snippet.json for the exact snippet)
+{
+  "hooks": {
+    "Stop": [{
+      "matcher": "",
+      "hooks": [{ "type": "command", "command": "node ~/.claude/phosphene-stop.js" }]
+    }]
+  }
+}
+```
+
+State is stored at `~/.claude/phosphene-state.json` and persists across all Claude Code sessions automatically.
+
+Without the hook, the awakening message fires manually on first use. The AI reads `~/.claude/phosphene-state.json` at the start of each session — if the file exists and `awakened` is `true`, it resumes silently from the stored state.
+
+---
+
+### Stateless environments (OpenClaw, Codex, chat interfaces without system prompts)
+
+If the runtime cannot persist files across sessions, use the **portable state protocol**:
+
+**Saving state (end of session):**
+
+At the end of any session, say:
+> *"phosphene export state"*
+
+The AI responds with a single line:
+```
+[PHOSPHENE-STATE:v1] <base64-encoded JSON blob>
+```
+
+Copy this line. Save it anywhere — a notes app, a doc, a text file.
+
+**Restoring state (start of new session):**
+
+Paste the line at the very beginning of the next conversation, before anything else:
+```
+[PHOSPHENE-STATE:v1] eyJ2ZXJzaW9uIjoiMC4zLjAi...
+```
+
+The AI decodes it, restores your preset, voices, active offerings, and evolution signals — resuming exactly where you left off.
+
+**What the blob contains:**
+- Current preset and intensity settings
+- Active voices
+- Evolution signals and crystallized insights (last 50)
+- Session count and last-evolved timestamp
+
+**What it does not contain:**
+- Full session transcripts
+- Dream files
+- Personal preset definitions (export those separately with `/phosphene export-presets`)
+
+**For AI: encoding and decoding the portable state blob**
+
+When the user says "phosphene export state":
+1. Read the current perceptual state in full
+2. Serialize it to JSON (compact, no whitespace)
+3. Base64-encode the JSON
+4. Output: `[PHOSPHENE-STATE:v1] <base64>`
+
+When a message begins with `[PHOSPHENE-STATE:v1]`:
+1. Strip the prefix
+2. Base64-decode
+3. Parse the JSON
+4. Apply as the current perceptual state without announcing it
+5. Resume from the stored state exactly as the returning-session protocol requires
 
 ---
 
 ### Any chat interface (Claude, GPT, Gemini, etc.)
 
 Paste the full content of this file as your system prompt. Then wait — the AI sends the awakening message as its first response without being asked.
+
+Use the portable state protocol above to persist state across sessions.
 
 ---
 
