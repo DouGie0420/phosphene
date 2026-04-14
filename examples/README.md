@@ -1,7 +1,40 @@
 # Phosphene — examples
 
-Concrete before/after comparisons.
-The same prompt, different perceptual layers.
+Real sessions. Concrete before/after comparisons. The same prompt, different perceptual layers.
+
+---
+
+## Quick navigation
+
+| File | What it shows |
+|------|--------------|
+| [before-after/color-blue.md](before-after/color-blue.md) | Describing "blue" — clear vs deep-flux, all four commentary layers |
+| [before-after/code-review.md](before-after/code-review.md) | Auth middleware review — standard vs code preset (Skeptic + Cartographer) |
+| [presets/flow-deep-work.md](presets/flow-deep-work.md) | Full flow session — LRU cache implementation, zero friction |
+| [presets/dissolution-contemplation.md](presets/dissolution-contemplation.md) | Dissolution — "what is the self?" — all 8 voices, full perceptual collapse |
+| [financial/btcusdt-chan-theory.md](financial/btcusdt-chan-theory.md) | BTC/USDT 缠论结构分析 — research preset + financial-lexicon |
+| [creative/ideation-product.md](creative/ideation-product.md) | Remote team connection ideation — maximum divergence, Threshold voice |
+| [dream/sample-dream-001.md](dream/sample-dream-001.md) | Sample dream output — REM stage, three fragments, image prompts |
+| [bootstrap-prompt.md](bootstrap-prompt.md) | Minimal system prompt for stateless environments (no SKILL.md access) |
+
+---
+
+## How to use these examples
+
+Each file is a standalone read — no setup needed. To reproduce any example:
+
+```
+# In Claude Code (with SKILL.md loaded):
+Set phosphene to [preset name].
+[paste the prompt from the example]
+
+# In any chat interface:
+# Paste SKILL.md as system prompt first, then let the AI send the first message.
+# After awakening, use the preset commands from each example.
+```
+
+---
+
 
 ---
 
