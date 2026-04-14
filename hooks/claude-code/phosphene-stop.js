@@ -22,7 +22,11 @@
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { homedir } from 'os';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { spawn } from 'child_process';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ─── Path resolution ──────────────────────────────────────────────────────────
 
@@ -117,4 +121,18 @@ if (ready) {
     `${ready.sessionsSince} sessions accumulated. ` +
     `Say "phosphene evolve" at the start of your next session.\n`
   );
+}
+
+// ── Trigger dream daemon in background ────────────────────────────────────────
+// The daemon checks its own timing/probability conditions before dreaming.
+// Runs detached so it doesn't block the Stop hook from completing.
+const daemonPath = join(__dirname, '../../scripts/dream-daemon.js');
+if (existsSync(daemonPath)) {
+  const child = spawn(process.execPath, [daemonPath], {
+    detached:  true,
+    stdio:     'ignore',
+    // Pass the dreams log path via env so the daemon can log to it
+    env: { ...process.env },
+  });
+  child.unref(); // don't wait for it
 }

@@ -189,7 +189,7 @@
     color: var(--glow-pur);
     text-transform: uppercase;
   }
-  #gallery-generate-btn {
+  #gallery-load-btn {
     padding: 4px 14px;
     background: transparent;
     border: 1px solid var(--glow-pur);
@@ -201,21 +201,27 @@
     cursor: pointer;
     transition: background 0.15s;
   }
-  #gallery-generate-btn:hover { background: rgba(155,93,229,0.12); }
-  #gallery-generate-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  #gallery-note {
-    font-size: 10px;
+  #gallery-load-btn:hover { background: rgba(155,93,229,0.12); }
+  #gallery-note { font-size: 10px; color: var(--text-dim); margin-left: auto; }
+  #gallery-drop-zone {
+    margin: 0 24px 10px;
+    padding: 14px;
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    font-size: 11px;
     color: var(--text-dim);
-    margin-left: auto;
+    text-align: center;
+    transition: border-color .2s, color .2s;
   }
+  #gallery-drop-zone.drag-over { border-color: var(--glow-pur); color: var(--glow-pur); }
   #gallery-images {
     display: flex;
-    gap: 10px;
-    padding: 6px 24px 12px;
+    gap: 12px;
+    padding: 0 24px 12px;
     overflow-x: auto;
     scrollbar-width: thin;
     scrollbar-color: var(--border) transparent;
-    min-height: 140px;
+    min-height: 160px;
     align-items: flex-start;
   }
   .dream-img-card {
@@ -223,41 +229,16 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    width: 200px;
+    width: 220px;
   }
   .dream-img-card img {
-    width: 200px;
-    height: 130px;
-    object-fit: cover;
-    border-radius: 4px;
-    border: 1px solid var(--border);
-    background: var(--bg);
-    display: block;
+    width: 220px; height: 142px;
+    object-fit: cover; border-radius: 4px;
+    border: 1px solid var(--border); background: var(--bg); display: block;
   }
-  .dream-img-card .img-label {
-    font-size: 9px;
-    color: var(--text-dim);
-    line-height: 1.4;
-    max-height: 28px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .dream-img-spinner {
-    width: 200px;
-    height: 130px;
-    border-radius: 4px;
-    border: 1px solid var(--border);
-    background: var(--bg);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 10px;
-    color: var(--text-dim);
-    letter-spacing: 0.06em;
-    flex-shrink: 0;
-  }
-  @keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:.9} }
-  .dream-img-spinner { animation: pulse 1.6s infinite; }
+  .dream-card-stage { font-size: 9px; color: var(--glow-pur); letter-spacing: .07em; text-transform: uppercase; }
+  .dream-card-waking { font-size: 10px; color: var(--crystal); font-style: italic; line-height: 1.4; }
+  .dream-card-frag { font-size: 10px; color: var(--text-dim); line-height: 1.5; }
 
   /* ── Scrollable insights strip ──────────────────────── */
   #insights-strip {
@@ -310,14 +291,16 @@
     <div id="tooltip"></div>
   </div>
   <div id="insights-strip" style="display:flex"></div>
-  <!-- Dream image gallery (Pollinations.ai — free, no API key) -->
+  <!-- Dream file loader — drag in dream markdown files for local image display -->
   <div id="dream-gallery">
     <div id="gallery-header">
-      <span id="gallery-title">Dream Images</span>
-      <button id="gallery-generate-btn">Generate</button>
-      <span id="gallery-note">powered by Pollinations.ai · free · no API key required</span>
+      <span id="gallery-title">Dream Files</span>
+      <label id="gallery-load-btn" for="dream-file-input">Load dreams folder</label>
+      <input type="file" id="dream-file-input" accept=".md" multiple style="display:none">
+      <span id="gallery-note">drag &amp; drop dream .md files · or open dreams/gallery.html for full view</span>
     </div>
-    <div id="gallery-images"></div>
+    <div id="gallery-drop-zone">Drop dream markdown files here (from your dreams/ folder)</div>
+    <div id="gallery-images" style="display:none"></div>
   </div>
 </div>
 
@@ -700,127 +683,123 @@ function startLoop(data) {
   tick();
 }
 
-// ── Pollinations image generation ────────────────────────────────────────────
-// Free, no API key. URL = image. Works in any browser as <img src="...">.
-// https://image.pollinations.ai/prompt/{encoded}?params
-
-const DREAM_STYLES = {
-  dissolution:  'psychedelic surrealist oil painting, impossible geometry, chromatic aberration, Francis Bacon meets Remedios Varo',
-  'deep-flux':  'dark surrealism, layered translucent watercolor washes, dreamlike distortion, Leonora Carrington, moody violet and gold',
-  liminal:      'threshold photography, long exposure, liminal space, cool blue and warm amber split lighting',
-  code:         'technical blueprint illustration, precise architectural drawing, glowing accent lines, dark background, cyan and gold',
-  design:       'conceptual art direction, painterly editorial illustration, negative space, Saul Bass meets Paul Rand',
-  research:     'scientific illustration, detailed etching, diagram aesthetics, sepia and deep blue',
-  writing:      'illuminated manuscript meets modernism, ink on vellum, poetic abstraction, ink wash and gold leaf',
-  ideation:     'surrealist collage, multiple perspectives in one frame, Magritte-adjacent, vibrant and strange',
-  flow:         'minimal ink drawing, vast negative space, single brushstroke, Zen aesthetic, rice paper texture',
-  clear:        'clean natural light photography, minimal composition, documentary stillness',
-  default:      'dark surrealism, layered translucent watercolor, dreamlike distortion, violet and gold, Leonora Carrington',
-};
-
-function pollinationsUrl(prompt, preset, seed) {
-  const style = DREAM_STYLES[preset] ?? DREAM_STYLES.default;
-  const full  = `${prompt}, ${style}`;
-  const params = new URLSearchParams({
-    width: '800', height: '520',
-    model: 'flux', nologo: '1', enhance: 'false',
-    ...(seed != null ? { seed: String(seed) } : {}),
-  });
-  return `https://image.pollinations.ai/prompt/${encodeURIComponent(full)}?${params}`;
-}
-
-function buildDreamImagePrompts(evo, preset) {
-  const insights = evo.crystallizedInsights ?? [];
-  const voices   = (evo.emergentVoices ?? []).filter(v => v.userConfirmed).map(v => v.name);
-  const history  = evo.sessionHistory ?? [];
-
-  const prompts = [];
-
-  // Cover image: derived from top 2 crystallized insights
-  if (insights.length) {
-    const core = insights.slice(0, 2).join('. ');
-    prompts.push({ label: 'Dream Cover', prompt: core, seed: 42 });
-  } else {
-    prompts.push({ label: 'Dream Cover', prompt: 'abstract phosphene dream landscape, recursive patterns, luminous', seed: 42 });
-  }
-
-  // One image per insight (up to 3 more)
-  insights.slice(0, 3).forEach((ins, i) => {
-    prompts.push({ label: ins.slice(0, 60) + (ins.length > 60 ? '…' : ''), prompt: ins, seed: i + 1 });
-  });
-
-  // Session arc: productive vs noisy balance
-  const prodCount  = history.filter(s => s.outcome === 'productive').length;
-  const noisyCount = history.filter(s => s.outcome === 'noisy').length;
-  if (history.length > 3) {
-    const arcPrompt = prodCount > noisyCount
-      ? 'emergence, growing luminous pattern, order from chaos, crystallization'
-      : 'turbulence, dissolved signal, noise becoming pattern, threshold moment';
-    prompts.push({ label: 'Session Arc', prompt: arcPrompt, seed: 99 });
-  }
-
-  return prompts.slice(0, 5); // max 5 images
-}
+// ── Local dream file loading ──────────────────────────────────────────────────
+// Parses dream markdown files dragged/selected from the local dreams/ folder.
+// Shows images from local paths embedded as blob URLs.
 
 const gallery      = document.getElementById('dream-gallery');
 const galleryImgs  = document.getElementById('gallery-images');
-const genBtn       = document.getElementById('gallery-generate-btn');
-let   galleryData  = null;
+const dropZone     = document.getElementById('gallery-drop-zone');
+const fileInput    = document.getElementById('dream-file-input');
 
-function showGallery(evo, preset) {
-  galleryData = { evo, preset };
-  gallery.style.display = 'flex';
+function parseFrontmatter(text) {
+  const m = text.match(/^---\n([\s\S]*?)\n---/);
+  if (!m) return {};
+  const fm = m[1];
+  const get = (key) => (fm.match(new RegExp(`^${key}:\\s+(.+)$`, 'm'))?.[1] ?? '').trim().replace(/^"|"$/g, '');
+  const imgMatches = [...fm.matchAll(/^\s+(\d+):\s+"(.+)"$/gm)];
+  const imagePaths = {};
+  for (const [, k, v] of imgMatches) imagePaths[Number(k)] = v;
+  const fragBlocks = [...text.slice(m[0].length).matchAll(/## Fragment \d+ — (\w+)\n+([\s\S]*?)(?=\n## Fragment|\n---|\s*$)/g)];
+  const fragments = fragBlocks.map((fm2, i) => ({
+    order: i, logic: fm2[1],
+    text: fm2[2].trim().split('\n\n')[0].trim().slice(0, 200),
+  }));
+  return {
+    stage: get('stage') || 'rem',
+    preset: get('preset') || 'deep-flux',
+    dreamedAt: get('dreamedAt'),
+    wakingLine: get('wakingLine'),
+    imagePaths,
+    fragments,
+  };
 }
 
-function generateGalleryImages() {
-  if (!galleryData) return;
-  const { evo, preset } = galleryData;
-  const prompts = buildDreamImagePrompts(evo, preset);
+function renderDreamCard(dream, imageFiles) {
+  const card = document.createElement('div');
+  card.className = 'dream-img-card';
 
-  genBtn.disabled = true;
-  genBtn.textContent = 'Generating…';
+  // Find matching local image file (by path basename)
+  const firstImgPath = Object.values(dream.imagePaths)[0] ?? '';
+  const firstName    = firstImgPath.split(/[\\/]/).pop();
+  const imageFile    = imageFiles.find(f => f.name === firstName);
+
+  if (imageFile) {
+    const blobUrl = URL.createObjectURL(imageFile);
+    const img = document.createElement('img');
+    img.src = blobUrl;
+    img.alt = dream.stage;
+    card.appendChild(img);
+  } else {
+    const ph = document.createElement('div');
+    ph.style.cssText = 'width:220px;height:142px;display:flex;align-items:center;justify-content:center;background:var(--bg);border:1px solid var(--border);border-radius:4px;font-size:32px;opacity:.15';
+    ph.textContent = '◎';
+    card.appendChild(ph);
+  }
+
+  if (dream.stage) {
+    const s = document.createElement('div');
+    s.className = 'dream-card-stage';
+    s.textContent = `${dream.stage} · ${dream.preset}`;
+    card.appendChild(s);
+  }
+  if (dream.wakingLine) {
+    const w = document.createElement('div');
+    w.className = 'dream-card-waking';
+    w.textContent = `"${dream.wakingLine}"`;
+    card.appendChild(w);
+  }
+  if (dream.fragments?.[0]?.text) {
+    const f = document.createElement('div');
+    f.className = 'dream-card-frag';
+    f.textContent = dream.fragments[0].text.slice(0, 120) + '…';
+    card.appendChild(f);
+  }
+
+  return card;
+}
+
+async function loadDreamFiles(mdFiles, imageFiles) {
   galleryImgs.innerHTML = '';
+  galleryImgs.style.display = 'flex';
+  dropZone.style.display = 'none';
 
-  prompts.forEach(({ label, prompt, seed }, i) => {
-    // Show spinner first
-    const spinner = document.createElement('div');
-    spinner.className = 'dream-img-spinner';
-    spinner.textContent = 'dreaming…';
-    galleryImgs.appendChild(spinner);
+  for (const file of mdFiles) {
+    try {
+      const text  = await file.text();
+      const dream = parseFrontmatter(text);
+      if (!dream.stage) continue;
+      galleryImgs.appendChild(renderDreamCard(dream, imageFiles));
+    } catch (e) {
+      console.warn('Could not parse', file.name, e);
+    }
+  }
 
-    // Build URL — replace spinner with <img> once loaded
-    const url = pollinationsUrl(prompt, preset, seed);
-    const img = new Image();
-    img.src = url;
-    img.alt = label;
-    img.onload = () => {
-      const card = document.createElement('div');
-      card.className = 'dream-img-card';
-      const lbl = document.createElement('div');
-      lbl.className = 'img-label';
-      lbl.textContent = label;
-      card.appendChild(img);
-      card.appendChild(lbl);
-      galleryImgs.replaceChild(card, spinner);
-      // Re-enable button once all done
-      if (galleryImgs.querySelectorAll('.dream-img-spinner').length === 0) {
-        genBtn.disabled = false;
-        genBtn.textContent = 'Regenerate';
-      }
-    };
-    img.onerror = () => {
-      spinner.textContent = 'failed';
-      spinner.style.animation = 'none';
-      spinner.style.opacity = '0.4';
-      if (galleryImgs.querySelectorAll('.dream-img-spinner').length === 0) {
-        genBtn.disabled = false;
-        genBtn.textContent = 'Retry';
-      }
-    };
-  });
+  if (!galleryImgs.children.length) {
+    dropZone.style.display = 'block';
+    dropZone.textContent = 'No parseable dream files found.';
+  }
 }
 
-genBtn.addEventListener('click', generateGalleryImages);
+// Drag and drop
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const files = [...e.dataTransfer.files];
+  const mds   = files.filter(f => f.name.endsWith('.md'));
+  const imgs  = files.filter(f => /\.(jpg|jpeg|png|gif|webp)$/i.test(f.name));
+  if (mds.length) loadDreamFiles(mds, imgs);
+});
+
+// File input
+fileInput.addEventListener('change', () => {
+  const files = [...fileInput.files];
+  const mds   = files.filter(f => f.name.endsWith('.md'));
+  const imgs  = files.filter(f => /\.(jpg|jpeg|png|gif|webp)$/i.test(f.name));
+  if (mds.length) loadDreamFiles(mds, imgs);
+});
 
 // ── Render from state JSON ────────────────────────────────────────────────────
 function render(stateJson) {
@@ -845,8 +824,8 @@ function render(stateJson) {
       strip.style.display = 'none';
     }
 
-    // Dream image gallery (always show, images generated on demand)
-    showGallery(evo, s.preset ?? 'deep-flux');
+    // Show dream file panel
+    gallery.style.display = 'flex';
 
     layoutNodes(sessions, insights);
     initParticles();
