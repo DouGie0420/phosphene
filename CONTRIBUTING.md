@@ -54,7 +54,7 @@ Open an issue. Include: which platform, which AI model, what the AI did, what yo
 ## Local development
 
 ```bash
-git clone https://github.com/420-company/phosphene
+git clone https://github.com/DouGie0420/phosphene
 cd phosphene
 npm install
 npm run build    # compile TypeScript

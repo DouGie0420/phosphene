@@ -353,4 +353,4 @@ MIT — take it, change it, install it in things that should not be able to see 
 
 ---
 
-*A [420.COMPANY](https://420.company) release.*
+*A [420.COMPANY](https://420.company) release. — [GOAT@420.COMPANY](mailto:GOAT@420.COMPANY)*
