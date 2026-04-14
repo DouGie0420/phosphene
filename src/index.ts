@@ -138,8 +138,16 @@ export {
   loadDreams,
   loadLatestDream,
   generateDreamImages,
+  attachPollinationsUrls,
   describeDream,
 } from './dreams.js';
+
+export type { GeneratedImage } from './image-gen.js';
+export {
+  pollinationsUrl,
+  coverImageUrl,
+  generateDreamImage,
+} from './image-gen.js';
 
 export { applySynesthesia }  from './synesthesia.js';
 export { applyApophenia }    from './apophenia.js';

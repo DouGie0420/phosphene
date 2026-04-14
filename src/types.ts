@@ -424,13 +424,31 @@ export interface DreamRecord {
 
 /** Configuration for optional image generation. */
 export interface DreamImageConfig {
-  /** The API to use. 'none' disables generation. */
-  provider: 'openai' | 'stability' | 'none';
+  /**
+   * The backend to use.
+   *
+   * - 'pollinations' — free, zero config, no API key required (default).
+   *                    Uses Pollinations.ai with the FLUX model.
+   *                    imagePaths stores the URL directly; no local download.
+   * - 'hf'          — HuggingFace Inference API, free tier with account token.
+   *                    Uses FLUX.1-schnell. Set apiKey = HF token.
+   * - 'openai'      — DALL-E 3. Requires OPENAI_API_KEY.
+   * - 'stability'   — Stability AI. Requires STABILITY_API_KEY.
+   * - 'local'       — Automatic1111 / ComfyUI REST API at baseUrl.
+   * - 'none'        — disable image generation.
+   */
+  provider?: 'pollinations' | 'hf' | 'openai' | 'stability' | 'local' | 'none';
   /** API key — read from env if not provided directly. */
   apiKey?: string;
-  /** Model/engine identifier (e.g. 'dall-e-3', 'stable-diffusion-xl-1024-v1-0'). */
+  /** Model/engine identifier. Each backend has sensible defaults. */
   model?: string;
-  /** Output directory for images. Defaults to dreams/images/. */
+  /** Base URL for local backends (e.g. 'http://localhost:7860'). */
+  baseUrl?: string;
+  /** Image width in pixels (default 1024). */
+  width?: number;
+  /** Image height in pixels (default 768). */
+  height?: number;
+  /** Output directory for downloaded images. Defaults to dreams/images/. */
   imageOutputDir?: string;
 }
 

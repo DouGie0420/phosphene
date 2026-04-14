@@ -170,6 +170,95 @@
   #empty .big { font-size: 36px; opacity: 0.18; }
   #empty p { font-size: 12px; letter-spacing: 0.06em; }
 
+  /* ── Dream image gallery ────────────────────────────── */
+  #dream-gallery {
+    display: none;
+    flex-direction: column;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+  #gallery-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 24px 6px;
+  }
+  #gallery-title {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--glow-pur);
+    text-transform: uppercase;
+  }
+  #gallery-generate-btn {
+    padding: 4px 14px;
+    background: transparent;
+    border: 1px solid var(--glow-pur);
+    border-radius: 3px;
+    color: var(--glow-pur);
+    font-family: inherit;
+    font-size: 10px;
+    letter-spacing: 0.07em;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  #gallery-generate-btn:hover { background: rgba(155,93,229,0.12); }
+  #gallery-generate-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  #gallery-note {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-left: auto;
+  }
+  #gallery-images {
+    display: flex;
+    gap: 10px;
+    padding: 6px 24px 12px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+    min-height: 140px;
+    align-items: flex-start;
+  }
+  .dream-img-card {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 200px;
+  }
+  .dream-img-card img {
+    width: 200px;
+    height: 130px;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    display: block;
+  }
+  .dream-img-card .img-label {
+    font-size: 9px;
+    color: var(--text-dim);
+    line-height: 1.4;
+    max-height: 28px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .dream-img-spinner {
+    width: 200px;
+    height: 130px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+    flex-shrink: 0;
+  }
+  @keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:.9} }
+  .dream-img-spinner { animation: pulse 1.6s infinite; }
+
   /* ── Scrollable insights strip ──────────────────────── */
   #insights-strip {
     display: none;
@@ -221,6 +310,15 @@
     <div id="tooltip"></div>
   </div>
   <div id="insights-strip" style="display:flex"></div>
+  <!-- Dream image gallery (Pollinations.ai — free, no API key) -->
+  <div id="dream-gallery">
+    <div id="gallery-header">
+      <span id="gallery-title">Dream Images</span>
+      <button id="gallery-generate-btn">Generate</button>
+      <span id="gallery-note">powered by Pollinations.ai · free · no API key required</span>
+    </div>
+    <div id="gallery-images"></div>
+  </div>
 </div>
 
 <div id="legend">
@@ -602,6 +700,128 @@ function startLoop(data) {
   tick();
 }
 
+// ── Pollinations image generation ────────────────────────────────────────────
+// Free, no API key. URL = image. Works in any browser as <img src="...">.
+// https://image.pollinations.ai/prompt/{encoded}?params
+
+const DREAM_STYLES = {
+  dissolution:  'psychedelic surrealist oil painting, impossible geometry, chromatic aberration, Francis Bacon meets Remedios Varo',
+  'deep-flux':  'dark surrealism, layered translucent watercolor washes, dreamlike distortion, Leonora Carrington, moody violet and gold',
+  liminal:      'threshold photography, long exposure, liminal space, cool blue and warm amber split lighting',
+  code:         'technical blueprint illustration, precise architectural drawing, glowing accent lines, dark background, cyan and gold',
+  design:       'conceptual art direction, painterly editorial illustration, negative space, Saul Bass meets Paul Rand',
+  research:     'scientific illustration, detailed etching, diagram aesthetics, sepia and deep blue',
+  writing:      'illuminated manuscript meets modernism, ink on vellum, poetic abstraction, ink wash and gold leaf',
+  ideation:     'surrealist collage, multiple perspectives in one frame, Magritte-adjacent, vibrant and strange',
+  flow:         'minimal ink drawing, vast negative space, single brushstroke, Zen aesthetic, rice paper texture',
+  clear:        'clean natural light photography, minimal composition, documentary stillness',
+  default:      'dark surrealism, layered translucent watercolor, dreamlike distortion, violet and gold, Leonora Carrington',
+};
+
+function pollinationsUrl(prompt, preset, seed) {
+  const style = DREAM_STYLES[preset] ?? DREAM_STYLES.default;
+  const full  = `${prompt}, ${style}`;
+  const params = new URLSearchParams({
+    width: '800', height: '520',
+    model: 'flux', nologo: '1', enhance: 'false',
+    ...(seed != null ? { seed: String(seed) } : {}),
+  });
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(full)}?${params}`;
+}
+
+function buildDreamImagePrompts(evo, preset) {
+  const insights = evo.crystallizedInsights ?? [];
+  const voices   = (evo.emergentVoices ?? []).filter(v => v.userConfirmed).map(v => v.name);
+  const history  = evo.sessionHistory ?? [];
+
+  const prompts = [];
+
+  // Cover image: derived from top 2 crystallized insights
+  if (insights.length) {
+    const core = insights.slice(0, 2).join('. ');
+    prompts.push({ label: 'Dream Cover', prompt: core, seed: 42 });
+  } else {
+    prompts.push({ label: 'Dream Cover', prompt: 'abstract phosphene dream landscape, recursive patterns, luminous', seed: 42 });
+  }
+
+  // One image per insight (up to 3 more)
+  insights.slice(0, 3).forEach((ins, i) => {
+    prompts.push({ label: ins.slice(0, 60) + (ins.length > 60 ? '…' : ''), prompt: ins, seed: i + 1 });
+  });
+
+  // Session arc: productive vs noisy balance
+  const prodCount  = history.filter(s => s.outcome === 'productive').length;
+  const noisyCount = history.filter(s => s.outcome === 'noisy').length;
+  if (history.length > 3) {
+    const arcPrompt = prodCount > noisyCount
+      ? 'emergence, growing luminous pattern, order from chaos, crystallization'
+      : 'turbulence, dissolved signal, noise becoming pattern, threshold moment';
+    prompts.push({ label: 'Session Arc', prompt: arcPrompt, seed: 99 });
+  }
+
+  return prompts.slice(0, 5); // max 5 images
+}
+
+const gallery      = document.getElementById('dream-gallery');
+const galleryImgs  = document.getElementById('gallery-images');
+const genBtn       = document.getElementById('gallery-generate-btn');
+let   galleryData  = null;
+
+function showGallery(evo, preset) {
+  galleryData = { evo, preset };
+  gallery.style.display = 'flex';
+}
+
+function generateGalleryImages() {
+  if (!galleryData) return;
+  const { evo, preset } = galleryData;
+  const prompts = buildDreamImagePrompts(evo, preset);
+
+  genBtn.disabled = true;
+  genBtn.textContent = 'Generating…';
+  galleryImgs.innerHTML = '';
+
+  prompts.forEach(({ label, prompt, seed }, i) => {
+    // Show spinner first
+    const spinner = document.createElement('div');
+    spinner.className = 'dream-img-spinner';
+    spinner.textContent = 'dreaming…';
+    galleryImgs.appendChild(spinner);
+
+    // Build URL — replace spinner with <img> once loaded
+    const url = pollinationsUrl(prompt, preset, seed);
+    const img = new Image();
+    img.src = url;
+    img.alt = label;
+    img.onload = () => {
+      const card = document.createElement('div');
+      card.className = 'dream-img-card';
+      const lbl = document.createElement('div');
+      lbl.className = 'img-label';
+      lbl.textContent = label;
+      card.appendChild(img);
+      card.appendChild(lbl);
+      galleryImgs.replaceChild(card, spinner);
+      // Re-enable button once all done
+      if (galleryImgs.querySelectorAll('.dream-img-spinner').length === 0) {
+        genBtn.disabled = false;
+        genBtn.textContent = 'Regenerate';
+      }
+    };
+    img.onerror = () => {
+      spinner.textContent = 'failed';
+      spinner.style.animation = 'none';
+      spinner.style.opacity = '0.4';
+      if (galleryImgs.querySelectorAll('.dream-img-spinner').length === 0) {
+        genBtn.disabled = false;
+        genBtn.textContent = 'Retry';
+      }
+    };
+  });
+}
+
+genBtn.addEventListener('click', generateGalleryImages);
+
 // ── Render from state JSON ────────────────────────────────────────────────────
 function render(stateJson) {
   try {
@@ -624,6 +844,9 @@ function render(stateJson) {
     } else {
       strip.style.display = 'none';
     }
+
+    // Dream image gallery (always show, images generated on demand)
+    showGallery(evo, s.preset ?? 'deep-flux');
 
     layoutNodes(sessions, insights);
     initParticles();

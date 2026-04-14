@@ -609,12 +609,14 @@ ${entry}
  */
 export async function generateDreamImages(
   dream: DreamRecord,
-  config: DreamImageConfig,
+  config: DreamImageConfig = { provider: 'pollinations' },
   dreamsDir?: string,
 ): Promise<DreamRecord> {
   if (config.provider === 'none') return dream;
 
-  const dir = dreamsDir ?? resolveDreamsDir();
+  const { generateDreamImage } = await import('./image-gen.js');
+
+  const dir    = dreamsDir ?? resolveDreamsDir();
   const imgDir = config.imageOutputDir ?? join(dir, 'images');
   mkdirSync(imgDir, { recursive: true });
 
@@ -622,98 +624,46 @@ export async function generateDreamImages(
 
   for (const fragment of dream.fragments) {
     try {
-      const imgPath = await _callImageAPI(fragment.imagePrompt, config, imgDir, dream.id, fragment.order);
-      if (imgPath) {
-        updatedDream.imagePaths[fragment.order] = imgPath;
-        updatedDream.hasImages = true;
-      }
+      const filename  = `${dream.id}-f${fragment.order}.png`;
+      const outputPath = join(imgDir, filename);
+      const result = await generateDreamImage(
+        fragment.imagePrompt,
+        dream.imageStyle,
+        config,
+        outputPath,
+        fragment.order, // use order as deterministic seed for Pollinations
+      );
+      updatedDream.imagePaths[fragment.order] = result.path;
+      updatedDream.hasImages = true;
     } catch (err) {
       console.warn(`[phosphene-dreams] Image generation failed for fragment ${fragment.order}:`, err);
     }
   }
 
-  // Re-save with updated image paths
   saveDream(updatedDream, dir);
   return updatedDream;
 }
 
-async function _callImageAPI(
-  prompt: string,
-  config: DreamImageConfig,
-  imgDir: string,
-  dreamId: string,
-  fragmentOrder: number,
-): Promise<string | null> {
-  const apiKey = config.apiKey ?? process.env.OPENAI_API_KEY ?? process.env.STABILITY_API_KEY;
-  if (!apiKey) {
-    console.warn('[phosphene-dreams] No API key found. Set OPENAI_API_KEY or STABILITY_API_KEY.');
-    return null;
+/**
+ * Generate Pollinations URLs for all fragments without downloading.
+ * Zero-config, works for everyone — returns the dream with URLs in imagePaths.
+ * These URLs can be used as <img src="..."> in any browser or HTML file.
+ */
+export function attachPollinationsUrls(dream: DreamRecord): DreamRecord {
+  const { pollinationsUrl } = require('./image-gen.js') as typeof import('./image-gen.js');
+  const updated = { ...dream, imagePaths: { ...dream.imagePaths } };
+  for (const fragment of dream.fragments) {
+    if (!updated.imagePaths[fragment.order]) {
+      updated.imagePaths[fragment.order] = pollinationsUrl(
+        fragment.imagePrompt,
+        dream.imageStyle,
+        {},
+        fragment.order,
+      );
+    }
   }
-
-  if (config.provider === 'openai') {
-    const { default: https } = await import('https');
-    return new Promise((resolve) => {
-      const body = JSON.stringify({
-        model: config.model ?? 'dall-e-3',
-        prompt: prompt.replace(/--\w+\s+[\w:]+/g, '').trim(), // strip Midjourney params
-        n: 1,
-        size: '1792x1024',
-        quality: 'standard',
-      });
-
-      const req = https.request({
-        hostname: 'api.openai.com',
-        path: '/v1/images/generations',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Length': Buffer.byteLength(body),
-        },
-      }, res => {
-        let data = '';
-        res.on('data', chunk => { data += chunk; });
-        res.on('end', async () => {
-          try {
-            const parsed = JSON.parse(data);
-            const url: string = parsed.data?.[0]?.url;
-            if (!url) { resolve(null); return; }
-
-            // Download and save
-            const filename = `${dreamId}-f${fragmentOrder}.png`;
-            const filepath = join(imgDir, filename);
-            await _downloadImage(url, filepath);
-            resolve(filepath);
-          } catch { resolve(null); }
-        });
-      });
-
-      req.on('error', () => resolve(null));
-      req.write(body);
-      req.end();
-    });
-  }
-
-  // Stability AI
-  if (config.provider === 'stability') {
-    console.warn('[phosphene-dreams] Stability AI integration: set STABILITY_API_KEY and use the REST API directly with the image_prompts from the dream file.');
-    return null;
-  }
-
-  return null;
-}
-
-async function _downloadImage(url: string, filepath: string): Promise<void> {
-  const { default: https } = await import('https');
-  const { createWriteStream } = await import('fs');
-
-  return new Promise((resolve, reject) => {
-    const file = createWriteStream(filepath);
-    https.get(url, res => {
-      res.pipe(file);
-      file.on('finish', () => { file.close(); resolve(); });
-    }).on('error', reject);
-  });
+  updated.hasImages = Object.keys(updated.imagePaths).length > 0;
+  return updated;
 }
 
 // ─── YAML frontmatter parser (minimal) ───────────────────────────────────────
