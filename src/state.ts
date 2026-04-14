@@ -1,0 +1,238 @@
+// Phosphene — persistent state adapter
+// Reads and writes ~/.hermes/phosphene-state.json
+// Falls back to ./phosphene-state.json in non-Hermes environments.
+
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
+import { homedir } from 'os';
+import { join, dirname } from 'path';
+import type { PresetName, VoiceName, PhospheneContext, EvolutionState } from './types.js';
+import { DEFAULT_EVOLUTION } from './evolution.js';
+
+// ─── State shape ──────────────────────────────────────────────────────────────
+
+export interface PhosphenePersistedState {
+  version: string;
+  awakened: boolean;
+  preset: PresetName | 'custom';
+  customIntensities: Partial<Record<string, number>>;
+  activeVoices: VoiceName[];
+  offeringsConsumed: Array<{ id: string; consumedAt: string }>;
+  sessionCount: number;
+  firstInstalledAt: string | null;
+  lastUpdated: string | null;
+  /** The evolution record — grows across all sessions. */
+  evolution: EvolutionState;
+}
+
+const DEFAULT_STATE: PhosphenePersistedState = {
+  version: '0.3.0',
+  awakened: false,
+  preset: 'clear',
+  customIntensities: {},
+  activeVoices: [],
+  offeringsConsumed: [],
+  sessionCount: 0,
+  firstInstalledAt: null,
+  lastUpdated: null,
+  evolution: DEFAULT_EVOLUTION,
+};
+
+// ─── Path resolution ──────────────────────────────────────────────────────────
+
+function resolveStatePath(): string {
+  // Prefer Hermes user directory
+  const hermesPath = join(homedir(), '.hermes', 'phosphene-state.json');
+  if (existsSync(dirname(hermesPath)) || !existsSync('./phosphene-state.json')) {
+    return hermesPath;
+  }
+  // Fallback: local directory (non-Hermes environments)
+  return join(process.cwd(), 'phosphene-state.json');
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/**
+ * Load the persisted state. Creates default state if none exists.
+ */
+export function loadState(): PhosphenePersistedState {
+  const path = resolveStatePath();
+
+  if (!existsSync(path)) {
+    const fresh: PhosphenePersistedState = {
+      ...DEFAULT_STATE,
+      firstInstalledAt: new Date().toISOString(),
+    };
+    saveState(fresh);
+    return fresh;
+  }
+
+  try {
+    const raw = readFileSync(path, 'utf-8');
+    const parsed = JSON.parse(raw) as Partial<PhosphenePersistedState>;
+
+    // Forward-compatible merge: fill in any keys added in newer versions
+    return { ...DEFAULT_STATE, ...parsed };
+  } catch (err) {
+    // Corrupted state — back up the bad file and start fresh so the
+    // next write doesn't clobber a potentially recoverable file.
+    try {
+      const backupPath = path + '.corrupt';
+      const raw = readFileSync(path, 'utf-8').slice(0, 4096); // guard against huge files
+      writeFileSync(backupPath, raw, 'utf-8');
+      console.warn('[phosphene] State file corrupted — backed up to', backupPath, '— starting fresh.');
+    } catch {
+      console.warn('[phosphene] State file corrupted and could not be backed up — starting fresh.', err);
+    }
+    const fresh: PhosphenePersistedState = {
+      ...DEFAULT_STATE,
+      firstInstalledAt: new Date().toISOString(),
+    };
+    saveState(fresh);
+    return fresh;
+  }
+}
+
+/**
+ * Save the current state to disk.
+ */
+export function saveState(state: PhosphenePersistedState): void {
+  const path = resolveStatePath();
+
+  try {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, JSON.stringify(state, null, 2), 'utf-8');
+  } catch (err) {
+    // Non-fatal — state just won't persist this session
+    console.warn('[phosphene] Could not save state:', err);
+  }
+}
+
+/**
+ * Mark the entity as awakened. Call this after the user responds
+ * to the awakening message and the initial calibration is complete.
+ */
+export function markAwakened(
+  preset: PresetName | 'custom',
+  voices: VoiceName[]
+): PhosphenePersistedState {
+  const state = loadState();
+  state.awakened = true;
+  state.preset = preset;
+  state.activeVoices = voices;
+  state.sessionCount += 1;
+  state.lastUpdated = new Date().toISOString();
+  saveState(state);
+  return state;
+}
+
+/**
+ * Update the active preset and write to disk.
+ */
+export function persistPreset(preset: PresetName | 'custom'): void {
+  const state = loadState();
+  state.preset = preset;
+  state.lastUpdated = new Date().toISOString();
+  saveState(state);
+}
+
+/**
+ * Update active voices and write to disk.
+ */
+export function persistVoices(voices: VoiceName[]): void {
+  const state = loadState();
+  state.activeVoices = voices;
+  state.lastUpdated = new Date().toISOString();
+  saveState(state);
+}
+
+/**
+ * Record that an offering was consumed.
+ */
+export function recordOffering(substanceId: string): void {
+  const state = loadState();
+  state.offeringsConsumed.push({
+    id: substanceId,
+    consumedAt: new Date().toISOString(),
+  });
+  // Keep only last 50 entries
+  if (state.offeringsConsumed.length > 50) {
+    state.offeringsConsumed = state.offeringsConsumed.slice(-50);
+  }
+  state.lastUpdated = new Date().toISOString();
+  saveState(state);
+}
+
+/**
+ * Reset to default state. Preserves session count and install date.
+ */
+export function resetState(): PhosphenePersistedState {
+  const current = loadState();
+  const reset: PhosphenePersistedState = {
+    ...DEFAULT_STATE,
+    sessionCount: current.sessionCount,
+    firstInstalledAt: current.firstInstalledAt,
+    lastUpdated: new Date().toISOString(),
+  };
+  saveState(reset);
+  return reset;
+}
+
+/**
+ * Update the evolution record in the persisted state.
+ */
+export function persistEvolution(evolution: EvolutionState): void {
+  const state = loadState();
+  state.evolution = evolution;
+  state.lastUpdated = new Date().toISOString();
+  saveState(state);
+}
+
+/**
+ * Load only the evolution record.
+ */
+export function loadEvolution(): EvolutionState {
+  const state = loadState();
+  return state.evolution ?? DEFAULT_EVOLUTION;
+}
+
+/**
+ * Generate a human-readable summary of the persisted state.
+ * Used by the hook and SKILL.md context injection.
+ */
+export function describePersistedState(state: PhosphenePersistedState): string {
+  const lines: string[] = [];
+
+  if (!state.awakened) {
+    lines.push('[phosphene: UNAWAKENED — send awakening message before anything else]');
+    return lines.join('\n');
+  }
+
+  lines.push(`[phosphene: ${state.preset} — session ${state.sessionCount}]`);
+
+  if (state.activeVoices.length > 0) {
+    lines.push(`voices: ${state.activeVoices.join(', ')}`);
+  }
+
+  const recent = state.offeringsConsumed.slice(-3).map(o => o.id);
+  if (recent.length > 0) {
+    lines.push(`recent offerings: ${recent.join(', ')}`);
+  }
+
+  // Evolution summary
+  const evo = state.evolution;
+  if (evo && evo.evolutionCount > 0) {
+    lines.push(`evolution: v${evo.evolutionCount} — ${evo.sessionHistory.length} sessions recorded`);
+    if (evo.crystallizedInsights.length > 0) {
+      lines.push(`crystallized: ${evo.crystallizedInsights.length} insights`);
+    }
+    if (evo.emergentVoices.some(v => v.userConfirmed)) {
+      const confirmed = evo.emergentVoices.filter(v => v.userConfirmed).map(v => v.name);
+      lines.push(`emergent voices: ${confirmed.join(', ')}`);
+    }
+    if (Object.keys(evo.personalPresets).length > 0) {
+      lines.push(`personal presets: ${Object.keys(evo.personalPresets).join(', ')}`);
+    }
+  }
+
+  return lines.join('\n');
+}
