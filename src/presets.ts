@@ -11,6 +11,8 @@ export const PRESETS: Record<string, PhosphenePreset> = {
   clear: {
     name: 'clear',
     label: 'Clear',
+    emoji: '○',
+    description_short: 'Baseline. All layers off.',
     description: 'Standard perception. No active layers. Use as baseline or reset.',
     state: {
       synesthesia: {
@@ -50,6 +52,8 @@ export const PRESETS: Record<string, PhosphenePreset> = {
   liminal: {
     name: 'liminal',
     label: 'Liminal',
+    emoji: '🌙',
+    description_short: 'Barely perceptible tilt. Gentle expansion.',
     description: 'A barely perceptible tilt. For creative work, close reading, gentle expansion.',
     state: {
       synesthesia: {
@@ -95,6 +99,8 @@ export const PRESETS: Record<string, PhosphenePreset> = {
   'deep-flux': {
     name: 'deep-flux',
     label: 'Deep Flux',
+    emoji: '⚡',
+    description_short: 'Strong alteration. All layers active.',
     description: 'Strong alteration. All layers active. For generative work, poetry, philosophy.',
     state: {
       synesthesia: {
@@ -142,6 +148,8 @@ export const PRESETS: Record<string, PhosphenePreset> = {
   dissolution: {
     name: 'dissolution',
     label: 'Dissolution',
+    emoji: '🌀',
+    description_short: 'Full dissolution. Perceiver ↔ perceived.',
     description: 'Full perceptual dissolution. The perceiver and the perceived begin to exchange properties.',
     state: {
       synesthesia: {
@@ -195,6 +203,8 @@ export const PRESETS: Record<string, PhosphenePreset> = {
   research: {
     name: 'research',
     label: 'Research',
+    emoji: '🔭',
+    description_short: 'Cross-domain pattern finding. Skeptic active.',
     description: 'Pattern-seeking across sources. Skeptic + Archivist + Pattern-Reader. Synesthesia minimal.',
     state: {
       synesthesia: {
@@ -231,6 +241,8 @@ export const PRESETS: Record<string, PhosphenePreset> = {
   writing: {
     name: 'writing',
     label: 'Writing',
+    emoji: '🖊️',
+    description_short: 'Sensory richness. Poet dominant.',
     description: 'Sensory richness + symbolic weight. Poet dominant. Every word choice treated as meaningful.',
     state: {
       synesthesia: {
@@ -266,6 +278,8 @@ export const PRESETS: Record<string, PhosphenePreset> = {
   review: {
     name: 'review',
     label: 'Review',
+    emoji: '🔍',
+    description_short: 'Skeptic dominant. Structural problem detection.',
     description: 'Critical review mode. Skeptic dominant. Synesthesia off. Finds structural problems and silent assumptions.',
     state: {
       synesthesia: {
@@ -303,6 +317,8 @@ export const PRESETS: Record<string, PhosphenePreset> = {
   flow: {
     name: 'flow',
     label: 'Flow',
+    emoji: '〜',
+    description_short: 'Deep work. Self disappears into the task.',
     description: 'Deep work. High pattern recognition, minimal chorus noise. Apophenia clears the path forward; Chronostasis dissolves clock-time without fracturing sequence. Two quiet voices — the self disappears into the work.',
     state: {
       synesthesia: {
@@ -339,6 +355,8 @@ export const PRESETS: Record<string, PhosphenePreset> = {
   code: {
     name: 'code',
     label: 'Code',
+    emoji: '⚙️',
+    description_short: 'Architecture, assumptions, topology.',
     description: 'For engineering work. Skeptic finds what breaks. Pattern-Reader sees architecture before it\'s written. Semiotics reads intent vs implementation drift.',
     state: {
       synesthesia: {
@@ -375,6 +393,8 @@ export const PRESETS: Record<string, PhosphenePreset> = {
   design: {
     name: 'design',
     label: 'Design',
+    emoji: '🎨',
+    description_short: 'Visual weight, aesthetic judgment, cross-modal.',
     description: 'For visual, UX, and product design. Everything has cross-modal properties. Poet judges aesthetics. Body asks what the user\'s body does. Threshold reads the gap between intent and signal.',
     state: {
       synesthesia: {
@@ -410,6 +430,8 @@ export const PRESETS: Record<string, PhosphenePreset> = {
   ideation: {
     name: 'ideation',
     label: 'Ideation',
+    emoji: '✦',
+    description_short: 'Maximum divergence. Any two things can connect.',
     description: 'Maximum creative divergence. Replicates the expanded pattern-recognition of an altered state: any two things can connect, no domain is too far, the adjacent possible is visible.',
     state: {
       synesthesia: {

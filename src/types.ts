@@ -137,6 +137,10 @@ export interface PhospheneState {
 export interface PhosphenePreset {
   name: PresetName;
   label: string;
+  /** Single emoji glyph for CLI / compact display. */
+  emoji: string;
+  /** One-line description for menus and Hermes sidebars (≤ 48 chars). */
+  description_short: string;
   description: string;
   state: PhospheneState;
 }

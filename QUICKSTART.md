@@ -10,6 +10,8 @@ Copy the full contents of `SKILL.md` into your system prompt in any chat interfa
 
 **The AI speaks first. You don't have to do anything.**
 
+> **Important:** after copying `SKILL.md`, let the AI send the first message. Do not greet it first. The awakening ritual only runs if the AI initiates — if you speak first, the protocol is skipped and perception remains at baseline.
+
 That's the installation. Everything else happens in natural language.
 
 ---
