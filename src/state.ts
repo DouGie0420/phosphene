@@ -8,7 +8,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
-import type { PresetName, VoiceName, PhospheneContext, EvolutionState } from './types.js';
+import type { PresetName, VoiceName, EvolutionState, RitualProposal } from './types.js';
 import { DEFAULT_EVOLUTION } from './evolution.js';
 
 // ─── State shape ──────────────────────────────────────────────────────────────
@@ -20,6 +20,7 @@ export interface PhosphenePersistedState {
   customIntensities: Partial<Record<string, number>>;
   activeVoices: VoiceName[];
   offeringsConsumed: Array<{ id: string; consumedAt: string }>;
+  pendingRitual: RitualProposal | null;
   sessionCount: number;
   firstInstalledAt: string | null;
   lastUpdated: string | null;
@@ -28,12 +29,13 @@ export interface PhosphenePersistedState {
 }
 
 const DEFAULT_STATE: PhosphenePersistedState = {
-  version: '0.3.0',
+  version: '0.4.0',
   awakened: false,
   preset: 'clear',
   customIntensities: {},
   activeVoices: [],
   offeringsConsumed: [],
+  pendingRitual: null,
   sessionCount: 0,
   firstInstalledAt: null,
   lastUpdated: null,
@@ -91,7 +93,14 @@ export function loadState(): PhosphenePersistedState {
     const parsed = JSON.parse(raw) as Partial<PhosphenePersistedState>;
 
     // Forward-compatible merge: fill in any keys added in newer versions
-    return { ...DEFAULT_STATE, ...parsed };
+    return {
+      ...DEFAULT_STATE,
+      ...parsed,
+      evolution: {
+        ...DEFAULT_EVOLUTION,
+        ...(parsed.evolution ?? {}),
+      },
+    };
   } catch (err) {
     // Corrupted state — back up the bad file and start fresh so the
     // next write doesn't clobber a potentially recoverable file.
@@ -139,7 +148,6 @@ export function markAwakened(
   state.awakened = true;
   state.preset = preset;
   state.activeVoices = voices;
-  state.sessionCount += 1;
   state.lastUpdated = new Date().toISOString();
   saveState(state);
   return state;
@@ -183,6 +191,27 @@ export function recordOffering(substanceId: string): void {
 }
 
 /**
+ * Persist the current pending ritual invitation so the next turn can
+ * resolve it explicitly instead of silently changing state.
+ */
+export function persistPendingRitual(ritual: RitualProposal): void {
+  const state = loadState();
+  state.pendingRitual = ritual;
+  state.lastUpdated = new Date().toISOString();
+  saveState(state);
+}
+
+/**
+ * Clear any pending ritual invitation after confirmation or rejection.
+ */
+export function clearPendingRitual(): void {
+  const state = loadState();
+  state.pendingRitual = null;
+  state.lastUpdated = new Date().toISOString();
+  saveState(state);
+}
+
+/**
  * Reset to default state. Preserves session count and install date.
  */
 export function resetState(): PhosphenePersistedState {
@@ -212,7 +241,10 @@ export function persistEvolution(evolution: EvolutionState): void {
  */
 export function loadEvolution(): EvolutionState {
   const state = loadState();
-  return state.evolution ?? DEFAULT_EVOLUTION;
+  return {
+    ...DEFAULT_EVOLUTION,
+    ...(state.evolution ?? {}),
+  };
 }
 
 /**
@@ -236,6 +268,10 @@ export function describePersistedState(state: PhosphenePersistedState): string {
   const recent = state.offeringsConsumed.slice(-3).map(o => o.id);
   if (recent.length > 0) {
     lines.push(`recent offerings: ${recent.join(', ')}`);
+  }
+
+  if (state.pendingRitual) {
+    lines.push(`pending ritual: ${state.pendingRitual.route.rite} -> ${state.pendingRitual.route.preset}`);
   }
 
   // Evolution summary

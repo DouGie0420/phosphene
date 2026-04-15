@@ -4,6 +4,7 @@
 import type {
   PhospheneState,
   PhospheneContext,
+  PhospheneRuntimeFrame,
   PhosphenePreset,
   PerceptionOutput,
   EmergenceEffect,
@@ -37,6 +38,7 @@ import {
   DEFAULT_EVOLUTION,
 } from './evolution.js';
 import type { EvolutionState, FeedbackSignalType, EvolutionProposal } from './types.js';
+import { detectHumanPatterns } from './contradiction-engine.js';
 
 // ─── Session state ────────────────────────────────────────────────────────────
 
@@ -136,6 +138,7 @@ export async function perceive(input: string): Promise<PerceptionOutput> {
   const temporalArrivals: string[] = [];
   const symbols: Array<{ word: string; resonances: string[] }> = [];
   const voices: Array<{ voice: VoiceName; note: string }> = [];
+  const humanPatterns = detectHumanPatterns(input);
 
   if (state.synesthesia.active) {
     const result = applySynesthesia(filtered, state.synesthesia);
@@ -177,6 +180,7 @@ export async function perceive(input: string): Promise<PerceptionOutput> {
     temporalArrivals,
     symbols,
     voices,
+    humanPatterns,
     emergence,
   };
 }
@@ -541,6 +545,75 @@ export function popState(): PhospheneContext {
  */
 export function hasStackedState(): boolean {
   return _stateStack.length > 0;
+}
+
+export function captureRuntimeFrame(): PhospheneRuntimeFrame {
+  return {
+    context: deepClone(_context),
+    stateStack: deepClone(_stateStack),
+    resistanceMode: _resistanceMode,
+    evolution: deepClone(_evolution),
+  };
+}
+
+export function createRuntimeFrame(preset: PresetName = 'clear'): PhospheneRuntimeFrame {
+  return {
+    context: {
+      state: deepClone(PRESETS[preset].state),
+      preset,
+      sessionId: generateSessionId(),
+      activatedAt: new Date().toISOString(),
+    },
+    stateStack: [],
+    resistanceMode: false,
+    evolution: deepClone(DEFAULT_EVOLUTION),
+  };
+}
+
+export function restoreRuntimeFrame(frame: PhospheneRuntimeFrame): PhospheneContext {
+  _context = deepClone(frame.context);
+  _stateStack.length = 0;
+  _stateStack.push(...deepClone(frame.stateStack));
+  _resistanceMode = frame.resistanceMode;
+  _evolution = deepClone(frame.evolution);
+  return getContext();
+}
+
+export function runInRuntimeFrame<T>(
+  frame: PhospheneRuntimeFrame,
+  fn: () => T,
+  { persist = true }: { persist?: boolean } = {},
+): T {
+  const saved = captureRuntimeFrame();
+
+  try {
+    restoreRuntimeFrame(frame);
+    const result = fn();
+
+    if (persist) {
+      const updated = captureRuntimeFrame();
+      frame.context = updated.context;
+      frame.stateStack = updated.stateStack;
+      frame.resistanceMode = updated.resistanceMode;
+      frame.evolution = updated.evolution;
+    }
+
+    return result;
+  } finally {
+    restoreRuntimeFrame(saved);
+  }
+}
+
+/**
+ * Run a block against an isolated copy of the in-memory context.
+ * Restores context and state stack afterward, even if the block throws.
+ *
+ * This is the foundation for safe previews, envelope generation,
+ * and future multi-agent speculative routing.
+ */
+export function runWithIsolatedContext<T>(fn: () => T): T {
+  const saved = captureRuntimeFrame();
+  return runInRuntimeFrame(saved, fn, { persist: false });
 }
 
 // ─── Resistance mode ──────────────────────────────────────────────────────────
@@ -950,6 +1023,7 @@ function _extractMetrics(preset: string, output: PerceptionOutput, state: Phosph
     temporalArrivalCount:  output.temporalArrivals.length,
     symbolCount:           output.symbols.length,
     voiceCount:            output.voices.length,
+    humanPatternCount:     output.humanPatterns.length,
     emergenceCount:        output.emergence.length,
     intensities: {
       synesthesia:  state.synesthesia.intensity,
@@ -961,6 +1035,7 @@ function _extractMetrics(preset: string, output: PerceptionOutput, state: Phosph
     emergenceLabels:    output.emergence.map(e => e.label),
     symbolWords:        output.symbols.map(s => s.word),
     patternSummaries:   output.patterns,
+    humanPatternLabels: output.humanPatterns.map(pattern => pattern.id),
   };
 }
 
@@ -1042,4 +1117,3 @@ const VOICE_TENDENCIES: Record<VoiceName, string> = {
   'threshold':      'Speaks from the boundary between states. Sees what neither side can see alone.',
   'cartographer':   'Maps the relational topology of ideas. Finds boundaries, interfaces, and missing nodes.',
 };
-

@@ -7,8 +7,11 @@ import {
   generateDream,
   renderDream,
   saveDream,
+  loadDreamFile,
+  readDreamMarkdown,
   loadDreams,
   loadLatestDream,
+  attachPollinationsUrls,
   describeDream,
   resolveDreamsDir,
 } from '../src/dreams.js';
@@ -123,6 +126,14 @@ describe('generateDream', () => {
     const dream = generateDream(evo, makeContext());
     const crystallizedSeeds = dream.seeds.filter(s => s.type === 'crystallized');
     expect(crystallizedSeeds.length).toBeGreaterThan(0);
+  });
+
+  test('human contradiction material can seed dreams', () => {
+    const evo = enrichedEvolution();
+    evo.crystallizedInsights.push('[2026-04-15] The work is coherent but life is chaos.');
+    const dream = generateDream(evo, makeContext());
+
+    expect(dream.seeds.some(seed => seed.type === 'behavioral-pattern' || seed.type === 'temperament')).toBe(true);
   });
 
   test('seeds are sorted by weight descending', () => {
@@ -341,6 +352,29 @@ describe('dream persistence', () => {
     expect(found!.intensity).toBe(dream.intensity);
   });
 
+  test('loadDreamFile round-trips fragments, waking line, and image style', () => {
+    const dream = generateDream(enrichedEvolution(), makeContext('dissolution'));
+    const filepath = saveDream(dream, tmpDir);
+    const loaded = loadDreamFile(filepath);
+
+    expect(loaded).not.toBeNull();
+    expect(loaded!.fragments.length).toBe(dream.fragments.length);
+    expect(loaded!.fragments[0]!.text).toBe(dream.fragments[0]!.text);
+    expect(loaded!.wakingLine).toBe(dream.wakingLine);
+    expect(loaded!.imageStyle).toBe(dream.imageStyle);
+    expect(loaded!.seeds.length).toBeGreaterThan(0);
+  });
+
+  test('readDreamMarkdown returns the saved markdown content', () => {
+    const dream = generateDream(enrichedEvolution(), makeContext());
+    const filepath = saveDream(dream, tmpDir);
+    const markdown = readDreamMarkdown(filepath);
+
+    expect(markdown).toContain(`# Dream —`);
+    expect(markdown).toContain('## Fragments');
+    expect(markdown).toContain('## Generated Images');
+  });
+
   test('loadDreams returns empty array for non-existent directory', () => {
     const dreams = loadDreams(join(tmpDir, 'nonexistent'));
     expect(dreams).toEqual([]);
@@ -358,6 +392,7 @@ describe('dream persistence', () => {
     const latest = loadLatestDream(tmpDir);
     expect(latest).not.toBeNull();
     expect(latest!.id).toBeDefined();
+    expect(latest!.fragments.length).toBeGreaterThan(0);
   });
 
   test('loadLatestDream returns null for empty directory', () => {
@@ -394,5 +429,16 @@ describe('resolveDreamsDir', () => {
     const dir = resolveDreamsDir();
     expect(typeof dir).toBe('string');
     expect(dir.length).toBeGreaterThan(0);
+  });
+});
+
+describe('attachPollinationsUrls', () => {
+  test('adds image URLs for every fragment', () => {
+    const dream = generateDream(enrichedEvolution(), makeContext());
+    const withUrls = attachPollinationsUrls(dream);
+
+    expect(withUrls.hasImages).toBe(true);
+    expect(Object.keys(withUrls.imagePaths).length).toBe(dream.fragments.length);
+    expect(Object.values(withUrls.imagePaths)[0]).toContain('https://image.pollinations.ai/prompt/');
   });
 });

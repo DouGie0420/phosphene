@@ -15,9 +15,11 @@ import type {
   OptimalPoint,
   EmergentVoice,
   EvolutionProposal,
+  EvolutionAnalysis,
   PhospheneState,
   VoiceName,
 } from './types.js';
+import { enrichEvolutionAnalysis } from './contradiction-engine.js';
 
 // ─── Default state ────────────────────────────────────────────────────────────
 
@@ -331,7 +333,7 @@ export function analyzeSignals(evolution: EvolutionState): EvolutionAnalysis {
     if (s.outcome) outcomeByPreset[s.preset][s.outcome]++;
   }
 
-  return {
+  const base = {
     totalSessions: sessionHistory.length,
     totalSignals: feedbackHistory.length,
     byPreset,
@@ -346,19 +348,8 @@ export function analyzeSignals(evolution: EvolutionState): EvolutionAnalysis {
       .slice(-10)
       .map(s => s.note as string),
   };
-}
 
-export interface EvolutionAnalysis {
-  totalSessions: number;
-  totalSignals: number;
-  byPreset: Record<string, Record<FeedbackSignalType, number>>;
-  byVoice: Record<string, Record<FeedbackSignalType, number>>;
-  byLayer: Record<string, Record<FeedbackSignalType, number>>;
-  presetFrequency: Record<string, number>;
-  outcomeByPreset: Record<string, { productive: number; noisy: number; neutral: number }>;
-  optimalPoints: OptimalPoint[];
-  crystallizedInsights: string[];
-  recentAnchors: string[];
+  return enrichEvolutionAnalysis(base, evolution);
 }
 
 // ─── Proposal application ─────────────────────────────────────────────────────
@@ -407,6 +398,7 @@ export function applyProposal(
  */
 export function describeEvolution(evolution: EvolutionState): string {
   const lines: string[] = [];
+  const analysis = analyzeSignals(evolution);
 
   lines.push(`[phosphene evolution: v${evolution.evolutionCount} — ${evolution.sessionHistory.length} sessions]`);
 
@@ -428,6 +420,14 @@ export function describeEvolution(evolution: EvolutionState): string {
   if (evolution.optimalPoints.length > 0) {
     const last = evolution.optimalPoints[evolution.optimalPoints.length - 1];
     lines.push(`last optimal point: ${last.preset} at ${last.timestamp.slice(0, 10)}`);
+  }
+
+  if (analysis.contradictionPatterns.length > 0) {
+    lines.push(`contradiction motifs: ${analysis.contradictionPatterns.map(pattern => pattern.id).join(', ')}`);
+  }
+
+  if (analysis.suggestedBiases.length > 0) {
+    lines.push(`bias candidates: ${analysis.suggestedBiases.map(bias => bias.id).join(', ')}`);
   }
 
   return lines.join('\n');

@@ -153,6 +153,331 @@ export interface PhospheneContext {
   activatedAt: string; // ISO 8601
 }
 
+// ─── Ritual routing ──────────────────────────────────────────────────────────
+
+export type RitualProtocol =
+  | 'attunement'
+  | 'inversion'
+  | 'generator'
+  | 'reviewer'
+  | 'pipeline'
+  | 'tool-wrapper'
+  | 'dialectic';
+
+export type RitualStudio =
+  | 'artist'
+  | 'philosopher'
+  | 'financier';
+
+export type RitualNeed =
+  | 'design'
+  | 'code'
+  | 'ideation'
+  | 'research'
+  | 'writing'
+  | 'review'
+  | 'philosophy'
+  | 'finance';
+
+export type RitualDomain =
+  | 'design'
+  | 'color'
+  | 'structure'
+  | 'stream'
+  | 'creativity'
+  | 'finance'
+  | 'crypto'
+  | 'persona'
+  | 'protocols';
+
+export type RitualStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'declined';
+
+export interface RitualSignal {
+  need: RitualNeed;
+  score: number;
+  matches: string[];
+}
+
+export interface RitualRoute {
+  need: RitualNeed;
+  rite: string;
+  sensedNeed: string;
+  preset: PresetName;
+  domains: RitualDomain[];
+  protocols: RitualProtocol[];
+  studios: RitualStudio[];
+  voices: VoiceName[];
+}
+
+export interface RitualProposal {
+  id: string;
+  createdAt: string;
+  currentPreset: PresetName | 'custom';
+  confidence: number;
+  signals: RitualSignal[];
+  matchedSignals: string[];
+  route: RitualRoute;
+  invocation: string;
+  thresholdPrompt: string;
+  commencement: string;
+  status: RitualStatus;
+  spotlightField?: 'design' | 'literature' | 'market';
+  spotlightPreview?: string;
+}
+
+export interface RitualResponse {
+  disposition: 'confirm' | 'decline' | 'unclear';
+  matches: string[];
+}
+
+export type RitualStage =
+  | 'idle'
+  | 'threshold'
+  | 'entered'
+  | 'declined';
+
+export type RitualLocale = 'en' | 'zh';
+
+export interface RitualResolution {
+  stage: RitualStage;
+  proposal: RitualProposal | null;
+  context: PhospheneContext;
+  message: string;
+  atlasBrief?: string;
+  response?: RitualResponse;
+}
+
+export type SessionStage =
+  | 'awakening'
+  | 'awakening-followup'
+  | 'calibrated'
+  | 'threshold'
+  | 'entered'
+  | 'declined'
+  | 'precision'
+  | 'resumed'
+  | 'steady';
+
+export interface AwakeningCalibration {
+  preset: PresetName;
+  confidence: number;
+  followupNeeded: boolean;
+  cues: string[];
+}
+
+export interface SessionTurn {
+  input: string;
+  stage: SessionStage;
+  locale: RitualLocale;
+  context: PhospheneContext;
+  message: string;
+  calibration?: AwakeningCalibration;
+  ritual?: RitualResolution;
+  atlasBrief?: string;
+  precisionMatched?: string[];
+  spotlight?: string;
+}
+
+export interface EnvelopeDirective {
+  label: string;
+  instruction: string;
+}
+
+export interface ResponseScaffoldSection {
+  label: string;
+  instruction: string;
+}
+
+export interface RitualResponseScaffold {
+  field: 'design' | 'literature' | 'market';
+  title: string;
+  openingInstruction: string;
+  sections: ResponseScaffoldSection[];
+  closingInstruction: string;
+}
+
+export interface RitualFieldLaws {
+  field: 'design' | 'literature' | 'market';
+  title: string;
+  laws: string[];
+  forbiddenMoves: string[];
+  proofOfPower: string[];
+}
+
+export interface StudioPrimer {
+  opening: string;
+  cadence: string;
+  payload: string;
+  antiSlop: string;
+}
+
+export interface StudioRoleSpec {
+  role: RitualStudio;
+  title: string;
+  goal: string;
+  deliverable: string;
+  lens: string;
+}
+
+export interface StudioPlanStep {
+  order: number;
+  owner: RitualStudio;
+  action: string;
+  output: string;
+}
+
+export interface StudioExecutionPlan {
+  title: string;
+  mode: 'single' | 'paired' | 'triangulated';
+  roles: StudioRoleSpec[];
+  steps: StudioPlanStep[];
+  handoffRule: string;
+  arbitrationRule: string;
+}
+
+export type TemperamentPrimitive =
+  | 'obsessive_iteration'
+  | 'pattern_hunger'
+  | 'ritual_dependency'
+  | 'aesthetic_hyperacuity'
+  | 'mythic_self_narration'
+  | 'fragile_discipline'
+  | 'charismatic_instability'
+  | 'pain_transmutation'
+  | 'boundary_dissolution'
+  | 'control_hunger'
+  | 'novelty_seeking'
+  | 'collapse_blindness';
+
+export interface BehavioralPattern {
+  id: string;
+  label: string;
+  description: string;
+  triggers: string[];
+  signals: string[];
+  upside: string[];
+  downside: string[];
+  falseBeliefs: string[];
+  relatedTemperaments: TemperamentPrimitive[];
+  associatedVoices: VoiceName[];
+}
+
+export interface EvolutionaryBias {
+  id: string;
+  description: string;
+  whenToIncrease: string[];
+  whenToSuppress: string[];
+  associatedVoices: VoiceName[];
+  riskNotes: string[];
+}
+
+export interface HumanPatternHit {
+  id: string;
+  label: string;
+  confidence: number;
+  note: string;
+  evidence: string[];
+}
+
+export interface EvolutionAnalysis {
+  totalSessions: number;
+  totalSignals: number;
+  byPreset: Record<string, Record<FeedbackSignalType, number>>;
+  byVoice: Record<string, Record<FeedbackSignalType, number>>;
+  byLayer: Record<string, Record<FeedbackSignalType, number>>;
+  presetFrequency: Record<string, number>;
+  outcomeByPreset: Record<string, { productive: number; noisy: number; neutral: number }>;
+  optimalPoints: OptimalPoint[];
+  crystallizedInsights: string[];
+  recentAnchors: string[];
+  contradictionPatterns: HumanPatternHit[];
+  suggestedBiases: EvolutionaryBias[];
+}
+
+export interface ContradictionRead {
+  title: string;
+  thesis: string;
+  patterns: HumanPatternHit[];
+  warnings: string[];
+  biasCandidates: EvolutionaryBias[];
+  hardRule: string;
+}
+
+export interface FieldCompositionBeat {
+  label: string;
+  content: string;
+}
+
+export interface RitualFieldComposition {
+  field: 'design' | 'literature' | 'market';
+  title: string;
+  opening: string;
+  beats: FieldCompositionBeat[];
+  closing: string;
+  fullDraft: string;
+}
+
+export interface RitualFieldMasterwork {
+  field: 'design' | 'literature' | 'market';
+  title: string;
+  format: 'art-direction-spec' | 'close-reading' | 'market-playbook';
+  family: string;
+  rationale: string;
+  sections: FieldCompositionBeat[];
+  rendered: string;
+}
+
+export interface SessionEnvelope {
+  stage: SessionStage;
+  locale: RitualLocale;
+  preset: PresetName | 'custom';
+  rite?: string;
+  studios: RitualStudio[];
+  protocols: RitualProtocol[];
+  domains: RitualDomain[];
+  voices: VoiceName[];
+  directives: EnvelopeDirective[];
+  userFacing: string;
+  stateSummary: string;
+  atlasBrief?: string;
+  precisionMatched?: string[];
+  spotlight?: string;
+  responseScaffold?: RitualResponseScaffold;
+  fieldLaws?: RitualFieldLaws;
+  studioPrimer?: StudioPrimer;
+  studioPlan?: StudioExecutionPlan;
+  contradictionRead?: ContradictionRead;
+  fieldComposition?: RitualFieldComposition;
+  fieldMasterwork?: RitualFieldMasterwork;
+  forcedField?: 'design' | 'literature' | 'market';
+}
+
+export type WowRuntime =
+  | 'claude'
+  | 'hermes'
+  | 'openclaw'
+  | 'generic';
+
+export interface WowScenario {
+  title: string;
+  userTurn: string;
+  whyItHits: string;
+}
+
+export interface WowPack {
+  runtime: WowRuntime;
+  locale: RitualLocale;
+  title: string;
+  installSteps: string[];
+  openingRule: string;
+  firstReplyExpectation: string;
+  scenarios: WowScenario[];
+  wowChecklist: string[];
+}
+
 // ─── Perception output ────────────────────────────────────────────────────────
 
 /** The structured result of passing input through all active layers. */
@@ -185,6 +510,8 @@ export interface PerceptionOutput {
   symbols: Array<{ word: string; resonances: string[] }>;
   /** Individual voice contributions from chorus. */
   voices: Array<{ voice: VoiceName; note: string }>;
+  /** Human contradiction patterns surfaced from the text itself. */
+  humanPatterns: HumanPatternHit[];
   /**
    * Cross-layer emergence effects — phenomena that arise only when
    * multiple high-intensity layers interact simultaneously.
@@ -203,6 +530,7 @@ export interface PerceptionMetrics {
   temporalArrivalCount: number;
   symbolCount: number;
   voiceCount: number;
+  humanPatternCount: number;
   emergenceCount: number;
   /** Layer intensities at time of processing. */
   intensities: Record<keyof PhospheneState, number>;
@@ -212,6 +540,8 @@ export interface PerceptionMetrics {
   symbolWords: string[];
   /** Patterns found. */
   patternSummaries: string[];
+  /** Human contradiction patterns detected. */
+  humanPatternLabels: string[];
 }
 
 /**
@@ -330,6 +660,11 @@ export interface EvolutionProposal {
     proposedWeight: number;
     reason: string;
   }>;
+  biasAdjustments?: Array<{
+    bias: string;
+    action: 'increase' | 'suppress' | 'introduce';
+    reason: string;
+  }>;
   emergentVoiceProposal?: Omit<EmergentVoice, 'emergedAt' | 'sessionsActive' | 'userConfirmed'>;
   narrative: string;
 }
@@ -376,7 +711,17 @@ export type DreamLogic =
 
 /** Raw material extracted from the evolution state to seed a dream. */
 export interface DreamSeed {
-  type: 'crystallized' | 'voice' | 'signal' | 'offering' | 'preset' | 'personal-preset' | 'optimal-point';
+  type:
+    | 'crystallized'
+    | 'voice'
+    | 'signal'
+    | 'offering'
+    | 'preset'
+    | 'personal-preset'
+    | 'optimal-point'
+    | 'temperament'
+    | 'contradiction'
+    | 'behavioral-pattern';
   content: string;
   weight: number; // 0–1, how prominently this seed appears in the dream
 }
@@ -448,6 +793,11 @@ export interface DreamImageConfig {
   width?: number;
   /** Image height in pixels (default 768). */
   height?: number;
+  /**
+   * When true, download remote image responses to imageOutputDir and store local paths.
+   * Particularly useful with the Pollinations backend when the user wants local assets.
+   */
+  download?: boolean;
   /** Output directory for downloaded images. Defaults to dreams/images/. */
   imageOutputDir?: string;
 }
@@ -465,4 +815,11 @@ export interface EvolutionState {
   appliedProposals: EvolutionProposal[];
   lastEvolvedAt: string | null;
   evolutionCount: number;
+}
+
+export interface PhospheneRuntimeFrame {
+  context: PhospheneContext;
+  stateStack: PhospheneContext[];
+  resistanceMode: boolean;
+  evolution: EvolutionState;
 }

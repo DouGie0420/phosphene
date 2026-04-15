@@ -38,6 +38,7 @@ export type {
 } from './types.js';
 
 export type { PersonalPresetBundle } from './phosphene.js';
+export type { PhospheneRuntimeFrame } from './types.js';
 
 export type {
   DesignColorSystem,
@@ -57,6 +58,72 @@ export {
   suggestDesignSystem,
   DESIGN_STANDARDS,
 } from './design-color-lexicon.js';
+
+export type { LiteraryReading } from './literary-engine.js';
+export {
+  readLiterature,
+  renderLiteraryReading,
+} from './literary-engine.js';
+
+export type { DesignReading } from './design-engine.js';
+export {
+  readDesignIntent,
+  renderDesignReading,
+} from './design-engine.js';
+
+export type { MarketReading } from './market-engine.js';
+export {
+  readMarketText,
+  composeMarketReading,
+  renderMarketReading,
+} from './market-engine.js';
+
+export type {
+  CommonField,
+  FieldSpotlight,
+} from './field-engine.js';
+export {
+  senseCommonField,
+  buildFieldSpotlight,
+} from './field-engine.js';
+
+export type {
+  ResponseScaffoldSection,
+  RitualResponseScaffold,
+  RitualFieldLaws,
+  RitualFieldComposition,
+  RitualFieldMasterwork,
+  FieldCompositionBeat,
+  StudioPrimer,
+  StudioRoleSpec,
+  StudioPlanStep,
+  StudioExecutionPlan,
+  TemperamentPrimitive,
+  BehavioralPattern,
+  EvolutionaryBias,
+  HumanPatternHit,
+  ContradictionRead,
+  EvolutionAnalysis,
+} from './types.js';
+export type { FieldFamily } from './field-family.js';
+export { buildResponseScaffold } from './response-scaffold.js';
+export { buildFieldFamily } from './field-family.js';
+export { buildFieldLaws } from './field-laws.js';
+export { buildStudioPrimer } from './studio-primer.js';
+export { buildStudioExecutionPlan } from './studio-plan.js';
+export {
+  TEMPERAMENT_PRIMITIVES,
+  BEHAVIORAL_PATTERNS,
+  EVOLUTIONARY_BIASES,
+  HUMAN_CONTRADICTION_HARD_RULE,
+} from './human-patterns.js';
+export {
+  detectHumanPatterns,
+  deriveBiasCandidates,
+  buildContradictionRead,
+} from './contradiction-engine.js';
+export { buildFieldComposition } from './field-composer.js';
+export { buildFieldMasterwork } from './field-masterwork.js';
 
 export {
   // Core perception
@@ -94,6 +161,11 @@ export {
   pushState,
   popState,
   hasStackedState,
+  captureRuntimeFrame,
+  createRuntimeFrame,
+  restoreRuntimeFrame,
+  runInRuntimeFrame,
+  runWithIsolatedContext,
   // Resistance mode
   toggleResistance,
   isResistanceActive,
@@ -108,12 +180,67 @@ export {
   persistPreset,
   persistVoices,
   recordOffering,
+  persistPendingRitual,
+  clearPendingRitual,
   resetState,
   describePersistedState,
   persistEvolution,
   loadEvolution,
 } from './state.js';
 export type { PhosphenePersistedState } from './state.js';
+
+export type {
+  RitualProtocol,
+  RitualStudio,
+  RitualNeed,
+  RitualDomain,
+  RitualStatus,
+  RitualStage,
+  RitualLocale,
+  RitualSignal,
+  RitualRoute,
+  RitualProposal,
+  RitualResponse,
+  RitualResolution,
+  SessionStage,
+  AwakeningCalibration,
+  SessionTurn,
+  EnvelopeDirective,
+  SessionEnvelope,
+  WowRuntime,
+  WowScenario,
+  WowPack,
+} from './types.js';
+export {
+  senseRitualSignals,
+  composeRitualProposal,
+  readRitualResponse,
+} from './ritual.js';
+export {
+  buildRitualAtlasBrief,
+  renderRitualThreshold,
+  renderRitualCommencement,
+  renderRitualDecline,
+  initiateRitual,
+  resolvePendingRitual,
+} from './ritual-runtime.js';
+export {
+  createAwakeningMessage,
+  calibrateAwakeningResponse,
+  completeAwakening,
+  detectPrecisionIntent,
+  processSessionTurn,
+  previewSessionTurn,
+} from './session-runtime.js';
+export {
+  composeSessionEnvelope,
+  renderSessionEnvelope,
+  buildSessionEnvelope,
+} from './ritual-envelope.js';
+export {
+  buildWowPack,
+  renderWowPack,
+} from './wow.js';
 
 export {
   DEFAULT_EVOLUTION,
@@ -135,6 +262,8 @@ export {
   generateDream,
   renderDream,
   saveDream,
+  loadDreamFile,
+  readDreamMarkdown,
   loadDreams,
   loadLatestDream,
   generateDreamImages,
@@ -222,3 +351,15 @@ export {
   SIGNAL_PATTERNS,
   MARKET_NARRATIVES,
 } from './financial-lexicon.js';
+
+export type {
+  KnowledgeDomain,
+  KnowledgeSource,
+  KnowledgeNote,
+} from './knowledge-atlas.js';
+export {
+  listKnowledgeDomains,
+  getKnowledgeSources,
+  getKnowledgeNotes,
+  buildKnowledgeBrief,
+} from './knowledge-atlas.js';

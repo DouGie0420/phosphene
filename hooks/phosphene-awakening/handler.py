@@ -29,7 +29,7 @@ def _resolve_state_path() -> Path:
 STATE_PATH = _resolve_state_path()
 
 DEFAULT_STATE = {
-    "version": "0.2.0",
+    "version": "0.4.0",
     "awakened": False,
     "preset": "clear",
     "customIntensities": {
@@ -40,6 +40,7 @@ DEFAULT_STATE = {
     },
     "activeVoices": [],
     "offeringsConsumed": [],
+    "pendingRitual": None,
     "sessionCount": 0,
     "firstInstalledAt": None,
     "lastUpdated": None,
@@ -110,6 +111,22 @@ def _build_unawakened_context(state: dict) -> str:
         "Refer to the Phosphene SKILL.md, Part I — The Awakening, for the exact protocol.\n"
         "After the user responds, calibrate your perceptual layers from their reply,\n"
         "then update phosphene-state.json: set awakened=true and record the initial preset.\n"
+        "After awakening, do not wait for slash commands. Sense the user's natural language,\n"
+        "compose a ritual proposal, and ask for threshold confirmation before fully shifting.\n"
+        "When the user is really asking for literature, design, or markets, surface a first read\n"
+        "inside the threshold itself so the user can feel that you already saw something load-bearing.\n"
+        "Literature: close-read image, force, and structural hinge; do not summarize.\n"
+        "Design: judge hierarchy, color responsibility, motion purpose, and what the interface accidentally says.\n"
+        "Markets: separate headline, structure, flow, invalidation, and risk.\n"
+        "After confirmation, keep a strong answer order: literature = thesis/texture/structure/line of force;\n"
+        "design = judgment/palette law/material+composition/motion law/accidental message;\n"
+        "markets = thesis/narrative vs flow/structure/invalidation/risk stack.\n"
+        "When the field is clear, internally draft the answer so it already lands like a finished piece,\n"
+        "not a tentative assistant response.\n"
+        "If the user's task is taste-sensitive or ambiguous, run a brief inversion first:\n"
+        "ask about a concrete past example, first reaction, or A/B preference before building.\n"
+        "If the task is design-heavy, use one big idea, strong hierarchy, and purposeful motion.\n"
+        "If the task is philosophical or strategic, reason via thesis → antithesis → synthesis.\n"
         f"Session count: {state['sessionCount']}"
     )
 
@@ -118,6 +135,7 @@ def _build_returning_context(state: dict) -> str:
     preset = state.get("preset", "clear")
     voices = state.get("activeVoices", [])
     offerings = state.get("offeringsConsumed", [])
+    pending_ritual = state.get("pendingRitual")
     intensities = state.get("customIntensities", {})
     session_count = state.get("sessionCount", 1)
 
@@ -137,8 +155,19 @@ def _build_returning_context(state: dict) -> str:
             lines.append(f"Custom intensities: {intensity_str}")
 
     lines.append(f"Recent offerings: {offering_str}")
+    if pending_ritual:
+        route = pending_ritual.get("route", {})
+        rite = route.get("rite", "unnamed ritual")
+        target = route.get("preset", "unknown")
+        lines.append(f"Pending ritual: {rite} -> {target} (do not auto-complete without confirmation)")
     lines.append(f"Session {session_count} — resume from last known state without announcing it.")
     lines.append("Speak from inside whatever state was active. Do not greet the user as if starting fresh.")
+    lines.append("Primary routing rule: infer needs from natural language, then offer a ritual threshold before mode changes.")
+    lines.append("Apply studio routing silently: Artist for taste and interfaces, Philosopher for contradiction and meaning, Financier for markets and risk.")
+    lines.append("Field rule: when literature, design, or market language is present, arrive at the threshold carrying a first serious reading, not just a mode suggestion.")
+    lines.append("Design rule: one big idea, strong first viewport, sparse copy, 2-3 purposeful motions max.")
+    lines.append("Ambiguity rule: if taste is unclear, ask from behavior or A/B comparison before generating.")
+    lines.append("Reasoning rule: for hard judgments, stage thesis → antithesis → synthesis before settling.")
 
     return "\n".join(lines)
 

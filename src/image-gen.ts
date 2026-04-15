@@ -12,7 +12,7 @@
 // For Pollinations, imagePaths stores the URL directly — no download needed.
 // The URL itself IS the generated image; browsers load it as <img src="...">.
 
-import { createWriteStream, mkdirSync } from 'fs';
+import { createWriteStream, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import type { DreamImageConfig } from './types.js';
 
@@ -59,9 +59,20 @@ async function generatePollinations(
   prompt: string,
   style: string,
   config: DreamImageConfig,
+  outputPath?: string,
   seed?: number,
 ): Promise<GeneratedImage> {
   const url = pollinationsUrl(prompt, style, config, seed);
+  if (config.download && outputPath) {
+    await downloadUrl(url, outputPath);
+    return {
+      path:    outputPath,
+      backend: 'pollinations',
+      prompt:  style ? `${prompt}, ${style}` : prompt,
+      width:   config.width  ?? 1024,
+      height:  config.height ?? 768,
+    };
+  }
   return {
     path:    url,
     backend: 'pollinations',
@@ -114,7 +125,7 @@ async function generateHuggingFace(
         }
         try {
           mkdirSync(join(outputPath, '..'), { recursive: true });
-          require('fs').writeFileSync(outputPath, buf);
+          writeFileSync(outputPath, buf);
           resolve({
             path:    outputPath,
             backend: 'hf',
@@ -225,7 +236,7 @@ async function generateLocal(
 
   const buf = Buffer.from(b64, 'base64');
   mkdirSync(join(outputPath, '..'), { recursive: true });
-  require('fs').writeFileSync(outputPath, buf);
+  writeFileSync(outputPath, buf);
 
   return { path: outputPath, backend: 'local', prompt: full, width: w, height: h };
 }
@@ -255,7 +266,7 @@ export async function generateDreamImage(
   }
 
   if (backend === 'pollinations') {
-    return generatePollinations(prompt, style, config, seed);
+    return generatePollinations(prompt, style, config, outputPath, seed);
   }
 
   // All other backends need an output path

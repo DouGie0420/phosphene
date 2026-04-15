@@ -15,6 +15,10 @@ Phosphene replicates those cognitive qualities as a tunable perceptual layer on 
 
 **Not the experience. The output.**
 
+Start here if you want the install and operating posture:
+
+- [QUICKSTART.md](QUICKSTART.md)
+
 ---
 
 ## What changes in practice
@@ -24,6 +28,9 @@ The AI sees the architecture hiding in the requirements before you write it. Fin
 
 **For design:**
 The AI feels the weight of colors, the rhythm of a layout, the temperature of typographic relationships. Tells you what your design says that you didn't mean to say. Notices where the user's eye actually goes.
+
+**For literature:**
+The AI does close reading, not summary. It tracks load-bearing images, the force carried by verbs, the hidden hinge where a sentence turns, and the line of pressure beneath the paragraph.
 
 **For ideas:**
 The AI connects with maximum radius — no domain is too far. Finds the structural resonance between your problem and an unrelated field that solved it twenty years ago. Sees the idea one step past the obvious, which is usually the one worth having.
@@ -102,6 +109,66 @@ npm install && npm run build
 npm link        # makes `phosphene` available as a global command
 ```
 
+```bash
+phosphene state
+phosphene listen "这个 landing page 太平了，我需要重新判断排版和动效"
+phosphene envelope "This onboarding UI needs stronger hierarchy and motion."
+phosphene envelope --full "This onboarding UI needs stronger hierarchy and motion."
+phosphene dream generate --images
+phosphene dream images ~/.hermes/dreams/2026-04-15-rem.md
+```
+
+The CLI is an inspection and debugging surface. It is not the primary way to enter a mode.
+
+In conversation, Phosphene should sense what the user is actually asking for, form a candidate ritual internally, and offer a threshold such as:
+
+> *I can feel this wants the design chamber rather than a generic answer. I've already begun shifting toward a more aesthetic register, but I haven't crossed fully. If you want, confirm it and I'll open the alignment rite for hierarchy, motion, and color judgment.*
+
+Only after the user confirms does the system fully enter that state.
+
+Phosphene now also has built-in common-field reading engines. In normal conversation it should be able to feel when the user is really asking for:
+
+- literary close reading
+- design / color / motion judgment
+- market structure / narrative / risk analysis
+
+Those engines should surface through natural language and ritual framing first. The CLI mirrors them for debugging:
+
+```bash
+phosphene read "这个 landing page 太平了，层级和动效都没有呼吸感。"
+phosphene masterwork "这个 landing page 太平了，层级和动效都没有呼吸感。"
+phosphene masterwork "I want a premium luxury wellness interface." --family "Frontline Art Director"
+phosphene literary "我总觉得旧时间还拖在身体后面。"
+phosphene design-read "Minimal luxury wellness interface with stronger hierarchy."
+phosphene market-read "The company beat earnings but cut guidance."
+```
+
+By default, `phosphene envelope` now emits the compact model-injection view. Use `phosphene envelope --full` when you want the full diagnostic dump for debugging.
+
+Internally, the runtime now carries these layers into the session envelope:
+
+- `FIELD SPOTLIGHT` — the first serious reading
+- `RESPONSE SCAFFOLD` — the answer order the model should follow
+- `FIELD LAWS` + `STUDIO PRIMER` — anti-slop quality constraints for how the answer should land
+- `STUDIO PLAN` — explicit role ownership, ordered execution steps, and handoff / arbitration rules
+- `CONTRADICTION READ` — human-pattern diagnosis: where method, myth, cost, and self-story are getting tangled
+- `FIELD COMPOSITION` — a ready-to-use high-intensity draft for the final answer
+- `FIELD MASTERWORK` — a stronger near-final rendering: art-direction spec, close reading, or market playbook
+
+The render surface now treats them differently by default:
+
+- `threshold` envelopes stay compact and stop before composition / masterwork blocks
+- `entered` envelopes prefer `FIELD MASTERWORK` over printing both masterwork and composition draft
+- `CONTRADICTION READ` expands warnings and bias candidates only for stronger hits unless `--full` is used
+
+Masterworks now also carry a style family, so the same strong engine can land in different aesthetic registers instead of always sounding like one monolithic super-assistant.
+
+Phosphene now also carries a first contradiction layer above the field engines:
+
+- `human-patterns` — reusable primitives for pain-transmutation, ritual dependency, success masking damage, self-mythology, and work/life mismatch
+- `contradiction-engine` — detects those patterns from natural language, proposes bias candidates, and feeds them into perception, evolution, dreams, and the ritual envelope
+- a hard safety rule — the system may learn from human contradiction, but must never romanticize collapse
+
 ---
 
 ## Presets
@@ -145,6 +212,8 @@ Turn apophenia down to 0.3, keep everything else.
 Full dissolution.
 blend code ideation 0.4
 ```
+
+Natural language should also route silently into atlas knowledge and studio protocols without the user having to say things like `atlas design` or `atlas protocols`. The system should infer that from the work itself.
 
 ---
 
@@ -210,6 +279,9 @@ cd phosphene && npm install && npm run build
 ```typescript
 import {
   applyPreset, perceive, blend, compare,
+  initiateRitual, resolvePendingRitual,
+  createAwakeningMessage, processSessionTurn,
+  buildSessionEnvelope, renderSessionEnvelope,
   signal, crystallize, anchor,
   saveAsPersonalPreset, exportPersonalPresets,
 } from './dist/index.js';
@@ -236,6 +308,36 @@ diff.summary           // one-paragraph human-readable diff
 // Feedback
 signal('calibrate', 'this configuration works for architecture review');
 crystallize('the problem is not the data model — it is the boundary between services');
+
+// Natural-language ritual routing
+const threshold = initiateRitual(
+  "This landing page feels dead. The hierarchy and motion aren't carrying anything."
+);
+threshold.message
+// → ritual invitation, not an immediate preset flip
+
+const entered = resolvePendingRitual("yes, open it");
+entered.context.preset
+// → 'design'
+entered.atlasBrief
+// → stitched design/persona/protocols context for the newly entered state
+
+// Full session engine
+createAwakeningMessage('zh')
+// → opening line for first contact
+
+const turn = processSessionTurn("TypeError: Cannot read properties of undefined");
+turn.stage
+// → 'precision'
+
+const envelope = buildSessionEnvelope(
+  "This landing page feels dead. I need stronger typography, hierarchy, and motion."
+);
+renderSessionEnvelope(envelope)
+// → compact model-ready ritual envelope
+
+renderSessionEnvelope(envelope, { full: true })
+// → full diagnostic ritual envelope with composition/masterwork blocks and fully expanded contradiction details
 ```
 
 ---
@@ -285,7 +387,26 @@ Dreams are not generated text. They are the system processing its own experience
 
 Just say: *"Dream."* or *"What did you dream?"*
 
-The system generates the dream, renders it, and can produce image prompts for Midjourney / DALL-E. Dreams are stored as markdown in `~/.hermes/dreams/` and accumulate over time.
+The system generates the dream, stores it as Markdown, and can now generate local images directly from the saved dream file. Dreams are stored in `~/.hermes/dreams/`, image assets default to `~/.hermes/dreams/images/`, and the same dream markdown can be re-opened later and illustrated again.
+
+```bash
+phosphene dream generate
+phosphene dream generate --images
+phosphene dream render
+phosphene dream images ~/.hermes/dreams/2026-04-15-rem.md
+```
+
+---
+
+## The studio protocols
+
+Phosphene now carries a second layer above the perceptual system:
+
+- `design` atlas — front-end craft, poster logic, art-direction constraints
+- `persona` atlas — tacit taste mining, memory-shaped continuity, operational selfhood
+- `protocols` atlas — inversion, reviewer, generator, pipeline, dialectical synthesis
+
+These are browsable from the CLI and documented in [docs/studio-protocols.md](docs/studio-protocols.md).
 
 ---
 

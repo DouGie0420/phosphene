@@ -5,14 +5,27 @@
 //
 // Commands:
 //   state                  Show current perceptual state
+//   listen <text>          Process a natural-language turn through the session engine
+//   envelope <text>        Emit a compact ritual envelope for model/session injection
+//     --full               Emit the full diagnostic envelope without render elision
+//   wow [runtime] [locale] Emit a first-five-minutes wow pack
+//   read <text>            Auto-detect a common field and emit a deep reading
+//   masterwork <text>      Emit a style-family-aware masterwork rendering
+//     --field <name>       Force route: design | literature | market
+//     --family <name>      Override the auto-selected style family
+//   literary <text>        Run the literary close-reading engine
+//   design-read <text>     Run the design/color judgment engine
+//   market-read <text>     Run the financial language engine
 //   preset <name>          Apply a named preset
 //   presets                List all available presets
 //   signal <type>          Record a feedback signal (amplify|reduce|calibrate|crystallize|anchor|reject)
 //   dream                  Show the most recent dream
 //   dream list             List all recorded dreams
-//   dream render           Print the full markdown of the most recent dream
+//   dream render [file]    Print the full markdown of the latest or specified dream
 //   dream generate         Generate a new dream from current state
+//   dream images [file]    Generate local images for the latest or specified dream markdown
 //   market <symbol> [int]  Fetch live market data + Fibonacci + 缠论 analysis
+//   atlas <domain>         Browse the built-in knowledge atlas
 //   evolve                 Show evolution analysis
 //   help                   Show this help
 
@@ -29,6 +42,18 @@ import {
   compare as comparePresets,
   signal as recordSignal,
 } from './phosphene.js';
+import { processSessionTurn } from './session-runtime.js';
+import { buildSessionEnvelope, renderSessionEnvelope } from './ritual-envelope.js';
+import { buildWowPack, renderWowPack } from './wow.js';
+import { buildFieldSpotlight } from './field-engine.js';
+import { buildFieldMasterwork } from './field-masterwork.js';
+import { readLiterature, renderLiteraryReading } from './literary-engine.js';
+import { readDesignIntent, renderDesignReading } from './design-engine.js';
+import {
+  composeMarketReading,
+  readMarketText,
+  renderMarketReading,
+} from './market-engine.js';
 import {
   generateDesignTokens,
   suggestDesignSystem,
@@ -45,12 +70,20 @@ import {
   saveDream,
   loadDreams,
   loadLatestDream,
+  loadDreamFile,
   renderDream,
   describeDream,
+  generateDreamImages,
   resolveDreamsDir,
 } from './dreams.js';
 import { PRESETS } from './presets.js';
-import type { FeedbackSignalType, PresetName, VoiceName } from './types.js';
+import type { DreamImageConfig, FeedbackSignalType, PresetName, VoiceName } from './types.js';
+import { composeRitualProposal } from './ritual.js';
+import {
+  buildKnowledgeBrief,
+  listKnowledgeDomains,
+} from './knowledge-atlas.js';
+import { dirname, resolve } from 'path';
 
 // ─── Entry ────────────────────────────────────────────────────────────────────
 
@@ -59,14 +92,23 @@ const [,, cmd, ...args] = process.argv;
 async function main(): Promise<void> {
   switch (cmd) {
     case 'state':       return cmdState();
+    case 'listen':      return cmdListen(args.join(' ').trim());
+    case 'envelope':    return cmdEnvelope(args);
+    case 'wow':         return cmdWow(args[0], args[1]);
+    case 'read':        return cmdRead(args.join(' ').trim());
+    case 'masterwork':  return cmdMasterwork(args);
+    case 'literary':    return cmdLiterary(args.join(' ').trim());
+    case 'design-read': return cmdDesignRead(args.join(' ').trim());
+    case 'market-read': return cmdMarketRead(args.join(' ').trim());
     case 'preset':      return cmdPreset(args[0]);
     case 'presets':     return cmdListPresets();
     case 'signal':      return cmdSignal(args[0], args.slice(1));
-    case 'dream':       return cmdDream(args[0]);
+    case 'dream':       return await cmdDream(args);
     case 'market':      return await cmdMarket(args[0], args[1]);
     case 'compare':     return await cmdCompare(args[0], args[1], args.slice(2));
     case 'tokens':      return cmdTokens(args[0], args[1]);
     case 'suggest':     return cmdSuggest(args.join(' '));
+    case 'atlas':       return cmdAtlas(args[0], args.slice(1));
     case 'evolve':      return cmdEvolve();
     case 'help':
     case '--help':
@@ -122,6 +164,162 @@ function cmdState(): void {
 function intensityBar(value: number, width = 20): string {
   const filled = Math.round(value * width);
   return '█'.repeat(filled) + '░'.repeat(width - filled);
+}
+
+function cmdListen(input: string): void {
+  if (!input) {
+    console.error('Usage: phosphene listen "<natural language turn>"');
+    process.exit(1);
+  }
+
+  const result = processSessionTurn(input);
+  console.log('\n╔═══ Phosphene — Session Turn ═══╗\n');
+  console.log(`  Stage:  ${result.stage}`);
+  console.log(`  Locale: ${result.locale}`);
+  console.log(`  Preset: ${result.context.preset}`);
+  console.log('');
+  console.log(result.message);
+
+  if (result.calibration) {
+    console.log('');
+    console.log(`  Calibration: ${result.calibration.preset} (${Math.round(result.calibration.confidence * 100)}%)`);
+    if (result.calibration.cues.length > 0) {
+      console.log(`  Cues: ${result.calibration.cues.slice(0, 6).join(', ')}`);
+    }
+  }
+
+  if (result.ritual?.proposal) {
+    console.log('');
+    console.log(`  Rite: ${result.ritual.proposal.route.rite}`);
+    console.log(`  Target: ${result.ritual.proposal.route.preset}`);
+    console.log(`  Confidence: ${Math.round(result.ritual.proposal.confidence * 100)}%`);
+  }
+
+  if (result.precisionMatched && result.precisionMatched.length > 0) {
+    console.log('');
+    console.log(`  Precision triggers: ${result.precisionMatched.join(', ')}`);
+  }
+
+  if (result.atlasBrief) {
+    console.log('');
+    console.log(result.atlasBrief);
+  }
+
+  if (result.spotlight) {
+    console.log('');
+    console.log(result.spotlight);
+  }
+
+  console.log('');
+}
+
+function cmdEnvelope(args: string[]): void {
+  const full = args.includes('--full');
+  const input = args.filter(arg => arg !== '--full').join(' ').trim();
+
+  if (!input) {
+    console.error('Usage: phosphene envelope [--full] "<natural language turn>"');
+    process.exit(1);
+  }
+
+  const envelope = buildSessionEnvelope(input);
+  console.log('\n' + renderSessionEnvelope(envelope, { full }) + '\n');
+}
+
+function cmdWow(runtime?: string, locale?: string): void {
+  const resolvedRuntime = (runtime ?? 'generic') as 'claude' | 'hermes' | 'openclaw' | 'generic';
+  const resolvedLocale = (locale ?? 'zh') as 'zh' | 'en';
+  const pack = buildWowPack(resolvedRuntime, resolvedLocale);
+  console.log('\n' + renderWowPack(pack) + '\n');
+}
+
+function cmdRead(input: string): void {
+  if (!input) {
+    console.error('Usage: phosphene read "<text>"');
+    process.exit(1);
+  }
+
+  const spotlight = buildFieldSpotlight(input);
+  if (!spotlight) {
+    console.log('\n  No dominant common field detected yet. Add literary, design, or market context.\n');
+    return;
+  }
+
+  console.log(`\n  Field: ${spotlight.field} (${Math.round(spotlight.confidence * 100)}%)\n`);
+  console.log(spotlight.rendered + '\n');
+}
+
+function cmdMasterwork(args: string[]): void {
+  let familyOverride: string | undefined;
+  let forcedField: 'design' | 'literature' | 'market' | undefined;
+  const textParts: string[] = [];
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--family' && args[i + 1]) {
+      familyOverride = args[++i];
+      continue;
+    }
+    if (args[i] === '--field' && args[i + 1]) {
+      const field = args[++i] as typeof forcedField;
+      if (field === 'design' || field === 'literature' || field === 'market') {
+        forcedField = field;
+        continue;
+      }
+    }
+    textParts.push(args[i]!);
+  }
+
+  const input = textParts.join(' ').trim();
+
+  if (!input) {
+    console.error('Usage: phosphene masterwork "<text>" [--field design|literature|market] [--family "name"]');
+    process.exit(1);
+  }
+
+  const locale = /[\u4e00-\u9fff]/.test(input) ? 'zh' : 'en';
+  const proposal = composeRitualProposal(input, 'clear');
+  const masterwork = buildFieldMasterwork(input, proposal, locale, 'entered', {
+    familyOverride,
+    forcedField,
+  });
+
+  if (!masterwork) {
+    console.log('\n  No masterwork could be composed for this input yet.\n');
+    return;
+  }
+
+  console.log(`\n  Field: ${masterwork.field}`);
+  console.log(`  Family: ${masterwork.family}${familyOverride ? ' (override)' : ''}`);
+  if (forcedField) console.log(`  Forced field: ${forcedField}`);
+  console.log(`  Format: ${masterwork.format}\n`);
+  console.log(masterwork.rendered + '\n');
+}
+
+function cmdLiterary(input: string): void {
+  if (!input) {
+    console.error('Usage: phosphene literary "<text>"');
+    process.exit(1);
+  }
+
+  console.log('\n' + renderLiteraryReading(readLiterature(input)) + '\n');
+}
+
+function cmdDesignRead(input: string): void {
+  if (!input) {
+    console.error('Usage: phosphene design-read "<intent>"');
+    process.exit(1);
+  }
+
+  console.log('\n' + renderDesignReading(readDesignIntent(input)) + '\n');
+}
+
+function cmdMarketRead(input: string): void {
+  if (!input) {
+    console.error('Usage: phosphene market-read "<financial text>"');
+    process.exit(1);
+  }
+
+  console.log('\n' + renderMarketReading(readMarketText(input)) + '\n');
 }
 
 // ─── preset ───────────────────────────────────────────────────────────────────
@@ -190,11 +388,13 @@ function cmdSignal(type: string | undefined, rest: string[]): void {
 
 // ─── dream ────────────────────────────────────────────────────────────────────
 
-function cmdDream(sub: string | undefined): void {
+async function cmdDream(args: string[]): Promise<void> {
+  const [sub, ...rest] = args;
   switch (sub) {
     case 'list':     return cmdDreamList();
-    case 'render':   return cmdDreamRender();
-    case 'generate': return cmdDreamGenerate();
+    case 'render':   return cmdDreamRender(rest[0]);
+    case 'generate': return await cmdDreamGenerate(rest);
+    case 'images':   return await cmdDreamImages(rest);
     default:         return cmdDreamShow();
   }
 }
@@ -229,8 +429,8 @@ function cmdDreamList(): void {
   console.log('');
 }
 
-function cmdDreamRender(): void {
-  const dream = loadLatestDream();
+function cmdDreamRender(inputPath?: string): void {
+  const { dream } = loadDreamTarget(inputPath);
   if (!dream) {
     console.log('\n  No dreams recorded.\n');
     return;
@@ -238,7 +438,9 @@ function cmdDreamRender(): void {
   console.log(renderDream(dream));
 }
 
-function cmdDreamGenerate(): void {
+async function cmdDreamGenerate(args: string[]): Promise<void> {
+  const imageOptions = parseDreamImageOptions(args);
+  const shouldGenerateImages = args.includes('--images');
   const state   = loadState();
   const evo     = loadEvolution();
   const context = getContext();
@@ -249,8 +451,13 @@ function cmdDreamGenerate(): void {
     preset: state.preset,
   };
 
-  const dream    = generateDream(evo, finalContext);
-  const filepath = saveDream(dream);
+  let dream = generateDream(evo, finalContext);
+  const dreamsDir = resolveDreamsDir();
+  const filepath = saveDream(dream, dreamsDir);
+
+  if (shouldGenerateImages) {
+    dream = await generateDreamImages(dream, normalizeDreamImageConfig(imageOptions), dreamsDir);
+  }
 
   console.log(`\n  ✓ Dream generated: ${dream.stage}`);
   console.log(`  Fragments: ${dream.fragments.length} | Intensity: ${Math.round(dream.intensity * 100)}%`);
@@ -258,7 +465,105 @@ function cmdDreamGenerate(): void {
     console.log(`  Seeds: ${dream.seeds.slice(0, 3).map(s => s.content.slice(0, 30)).join(' | ')}`);
   }
   console.log(`  Saved: ${filepath}`);
+  if (shouldGenerateImages) {
+    const outputDir = imageOptions.imageOutputDir ?? resolve(dreamsDir, 'images');
+    console.log(`  Images: ${Object.keys(dream.imagePaths).length} generated`);
+    console.log(`  Image dir: ${outputDir}`);
+  }
   console.log('\n  Run "phosphene dream render" to read it.\n');
+}
+
+async function cmdDreamImages(args: string[]): Promise<void> {
+  const sourcePath = args.find(arg => !arg.startsWith('--'));
+  const { dream, dreamsDir, filepath } = loadDreamTarget(sourcePath);
+  if (!dream || !dreamsDir) {
+    console.log('\n  No dream markdown found.\n');
+    console.log('  Usage: phosphene dream images [path/to/dream.md] [--provider pollinations|hf|openai|local] [--out dir]\n');
+    return;
+  }
+
+  const options = parseDreamImageOptions(args);
+  const updated = await generateDreamImages(
+    dream,
+    normalizeDreamImageConfig(options),
+    dreamsDir,
+  );
+
+  console.log(`\n  ✓ Images generated for dream: ${updated.id}`);
+  console.log(`  Source: ${filepath ?? 'latest dream in archive'}`);
+  console.log(`  Count:  ${Object.keys(updated.imagePaths).length}`);
+  console.log(`  Output: ${options.imageOutputDir ?? resolve(dreamsDir, 'images')}\n`);
+}
+
+function parseDreamImageOptions(args: string[]): DreamImageConfig {
+  const options: DreamImageConfig = { provider: 'pollinations' };
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--provider' && args[i + 1]) {
+      options.provider = args[++i] as DreamImageConfig['provider'];
+      continue;
+    }
+    if (arg === '--out' && args[i + 1]) {
+      options.imageOutputDir = resolve(args[++i]!);
+      continue;
+    }
+    if (arg === '--width' && args[i + 1]) {
+      options.width = Number(args[++i]);
+      continue;
+    }
+    if (arg === '--height' && args[i + 1]) {
+      options.height = Number(args[++i]);
+      continue;
+    }
+    if (arg === '--model' && args[i + 1]) {
+      options.model = args[++i];
+      continue;
+    }
+    if (arg === '--base-url' && args[i + 1]) {
+      options.baseUrl = args[++i];
+      continue;
+    }
+    if (arg === '--api-key' && args[i + 1]) {
+      options.apiKey = args[++i];
+      continue;
+    }
+    if (arg === '--download') {
+      options.download = true;
+    }
+  }
+
+  return options;
+}
+
+function normalizeDreamImageConfig(options: DreamImageConfig): DreamImageConfig {
+  return {
+    ...options,
+    provider: options.provider ?? 'pollinations',
+    download: options.provider === 'pollinations' ? (options.download ?? true) : options.download,
+  };
+}
+
+function loadDreamTarget(inputPath?: string): {
+  dream: ReturnType<typeof loadLatestDream>;
+  dreamsDir: string | null;
+  filepath: string | null;
+} {
+  if (inputPath) {
+    const filepath = resolve(inputPath);
+    return {
+      dream: loadDreamFile(filepath),
+      dreamsDir: dirname(filepath),
+      filepath,
+    };
+  }
+
+  const dreamsDir = resolveDreamsDir();
+  return {
+    dream: loadLatestDream(dreamsDir),
+    dreamsDir,
+    filepath: null,
+  };
 }
 
 // ─── compare ─────────────────────────────────────────────────────────────────
@@ -413,6 +718,32 @@ function cmdSuggest(intent: string): void {
   console.log(`\n  Run "phosphene tokens ${system.id}" to get the CSS tokens.\n`);
 }
 
+// ─── atlas ────────────────────────────────────────────────────────────────────
+
+function cmdAtlas(domain: string | undefined, rest: string[]): void {
+  if (!domain) {
+    console.error('Usage: phosphene atlas <domain> [--query "..."]');
+    console.error(`Domains: ${listKnowledgeDomains().join(', ')}`);
+    process.exit(1);
+  }
+
+  if (!listKnowledgeDomains().includes(domain as any)) {
+    console.error(`Unknown atlas domain: "${domain}"`);
+    console.error(`Domains: ${listKnowledgeDomains().join(', ')}`);
+    process.exit(1);
+  }
+
+  let query = '';
+  for (let i = 0; i < rest.length; i++) {
+    if (rest[i] === '--query' && rest[i + 1]) {
+      query = rest[++i]!;
+      break;
+    }
+  }
+
+  console.log('\n' + buildKnowledgeBrief(domain as any, query) + '\n');
+}
+
 // ─── market ───────────────────────────────────────────────────────────────────
 
 const VALID_INTERVALS: KlineInterval[] = [
@@ -561,6 +892,12 @@ async function cmdMarket(symbol: string | undefined, interval: string | undefine
     console.log(`  ${line}`);
   }
 
+  const reading = composeMarketReading(snapshot, analysis);
+  console.log(`\n  ── Phosphene Market Read ───────────────────────────────────\n`);
+  for (const line of renderMarketReading(reading).split('\n')) {
+    console.log(`  ${line}`);
+  }
+
   console.log(`\n  数据获取时间: ${new Date(snapshot.fetchedAt).toISOString().replace('T', ' ').slice(0, 19)} UTC`);
   console.log(`  注意: 以上分析基于历史K线数据，不构成投资建议。\n`);
 }
@@ -621,6 +958,18 @@ function cmdHelp(): void {
 ╔═══ Phosphene CLI ═══╗
 
   phosphene state                  Current perceptual state
+  phosphene listen "<text>"        Run one natural-language turn through session routing
+  phosphene envelope "<text>"      Emit a compact ritual envelope for model/session injection
+  phosphene envelope --full "<text>"
+                                   Emit the full diagnostic envelope
+  phosphene wow [runtime] [locale] Emit a first-five-minutes wow pack
+  phosphene read "<text>"          Auto-detect a common field and emit a deep reading
+  phosphene masterwork "<text>"    Emit a style-family-aware masterwork rendering
+    --field design|literature|market
+    --family "<name>"              Override the auto-selected family
+  phosphene literary "<text>"      Literary close reading
+  phosphene design-read "<text>"   Design, color, and motion judgment
+  phosphene market-read "<text>"   Financial text reading
   phosphene preset <name>          Apply a named preset
   phosphene presets                List all available presets
   phosphene signal <type>          Record a feedback signal
@@ -629,8 +978,12 @@ function cmdHelp(): void {
     --voice <name>                 Associate with a voice
   phosphene dream                  Show the most recent dream
   phosphene dream list             List all recorded dreams
-  phosphene dream render           Print full dream markdown
+  phosphene dream render [file]    Print full dream markdown
   phosphene dream generate         Generate a new dream from current state
+    --images                       Generate local images immediately after writing the dream
+    --provider <name>              pollinations | hf | openai | local | none
+    --out <dir>                    Write images to a specific directory
+  phosphene dream images [file]    Generate local images for latest or specified dream markdown
   phosphene market <symbol> [int]  Live market data + Fibonacci + 缠论 analysis
     Default interval: 1h           Intervals: 1m 5m 15m 30m 1h 4h 1d 1w
   phosphene compare <a> [b]        Compare two presets — what each actually finds
@@ -638,6 +991,8 @@ function cmdHelp(): void {
   phosphene tokens <system>        Get CSS design tokens for a system
     css | js | tailwind            Output format (default: css)
   phosphene suggest <intent>       Suggest a design system for your intent
+  phosphene atlas <domain>         Browse the built-in knowledge atlas
+    --query "..."                  Filter atlas notes
   phosphene evolve                 Show evolution analysis
   phosphene help                   Show this help
 
