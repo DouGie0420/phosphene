@@ -230,6 +230,20 @@ describe('analyzeSignals', () => {
     expect(analysis.recentAnchors).toContain('Always check the boundary.');
     expect(analysis.recentAnchors).toContain('Biology metaphors work best.');
   });
+
+  test('surfaces contradiction patterns and suggested biases', () => {
+    let evo = freshEvolution();
+    evo = anchor(evo, 'The work is coherent but life is chaos.', 'writing');
+    evo = crystallize(evo, 'Without the ritual I think the work disappears.', 'writing');
+
+    const analysis = analyzeSignals(evo);
+    expect(analysis.contradictionPatterns.map(pattern => pattern.id)).toEqual(
+      expect.arrayContaining(['work_more_coherent_than_life', 'ritual_dependency'])
+    );
+    expect(analysis.suggestedBiases.map(bias => bias.id)).toEqual(
+      expect.arrayContaining(['bias_life_work_delta', 'bias_ritual_separation'])
+    );
+  });
 });
 
 // ─── describeEvolution ────────────────────────────────────────────────────────

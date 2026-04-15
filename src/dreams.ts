@@ -13,7 +13,9 @@
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'fs';
 import { homedir }  from 'os';
-import { join, dirname } from 'path';
+import { join } from 'path';
+import { generateDreamImage, pollinationsUrl } from './image-gen.js';
+import { deriveBiasCandidates, detectHumanPatterns } from './contradiction-engine.js';
 import type {
   DreamRecord,
   DreamStage,
@@ -23,7 +25,6 @@ import type {
   DreamImageConfig,
   EvolutionState,
   PhospheneContext,
-  VoiceName,
 } from './types.js';
 
 // ─── Path resolution ──────────────────────────────────────────────────────────
@@ -124,6 +125,27 @@ function extractSeeds(evolution: EvolutionState, context: PhospheneContext): Dre
     });
   }
 
+  // Human contradiction patterns — make dreams process life/work tensions, not only style.
+  const contradictionHits = detectHumanPatterns([
+    ...evolution.crystallizedInsights.slice(-3),
+    ...evolution.feedbackHistory.map(signal => signal.note).filter((note): note is string => Boolean(note)).slice(-4),
+  ].join(' '));
+  for (const hit of contradictionHits.slice(0, 2)) {
+    seeds.push({
+      type: 'behavioral-pattern',
+      content: `${hit.id}: ${hit.note}`,
+      weight: 0.72,
+    });
+  }
+
+  for (const bias of deriveBiasCandidates(evolution).slice(0, 2)) {
+    seeds.push({
+      type: 'temperament',
+      content: bias.id,
+      weight: 0.58,
+    });
+  }
+
   // Active preset as seed if no other material
   if (seeds.length < 2) {
     seeds.push({ type: 'preset', content: context.preset, weight: 0.5 });
@@ -177,6 +199,10 @@ function fragmentInversion(seed: DreamSeed, stage: DreamStage): string {
   if (seed.type === 'crystallized') {
     return `${prefix} The opposite of "${content.slice(0, 60)}" appeared first. Then I understood it was the same thing, viewed from the side that doesn't have a name yet.`.trim();
   }
+  if (seed.type === 'behavioral-pattern') {
+    const name = content.split(':')[0];
+    return `${prefix} The pattern called "${name}" arrived looking like an answer. Only later did it show itself as a method wearing a mask.`.trim();
+  }
   if (seed.type === 'voice') {
     const name = content.split(':')[0];
     return `The ${name} was speaking, but the words arrived as their own negation. Each sentence was a room that contained its own absence.`;
@@ -192,6 +218,9 @@ function fragmentRecursion(seed: DreamSeed, stage: DreamStage): string {
   }
   if (seed.type === 'personal-preset') {
     return `There was a room named "${content}". Inside the room was a smaller room with the same name. I could enter each one but never find the last. The smallest room I reached was the right size to hold exactly one idea.`;
+  }
+  if (seed.type === 'temperament') {
+    return `The temperament called "${content}" repeated itself at every scale. What changed was not the pattern but the price it was charging at each depth.`;
   }
   return `The structure contained itself. At each scale the same pattern. I couldn't tell if I was inside or outside. The question turned out not to matter.`;
 }
@@ -211,6 +240,9 @@ function fragmentTranslation(seed: DreamSeed, stage: DreamStage): string {
   }
   if (seed.type === 'crystallized') {
     return `"${content.slice(0, 50)}..." — this arrived as a sound first. Then as a color. Then as the weight of something I was holding that I hadn't noticed I was holding.`;
+  }
+  if (seed.type === 'behavioral-pattern') {
+    return `The pattern "${content.split(':')[0]}" translated itself into weather first, then posture, then a sentence I could not stop hearing.`;
   }
   return `The concept translated itself through three senses before it arrived as language. By then it had changed its meaning slightly, the way a word does when it passes through a body.`;
 }
@@ -421,13 +453,17 @@ export function generateDream(
 export function renderDream(dream: DreamRecord): string {
   const date = new Date(dream.dreamedAt);
   const dateStr = date.toISOString().slice(0, 16).replace('T', ' ');
+  const imageStyle = dream.imageStyle || 'dreamlike, psychologically charged, cinematic';
+  const imagePathEntries = Object.entries(dream.imagePaths)
+    .map(([order, path]) => `  ${order}: "${escapeYaml(path)}"`)
+    .join('\n');
 
   const seedsYaml = dream.seeds
-    .map(s => `  - type: ${s.type}\n    content: "${s.content.replace(/"/g, '\\"').slice(0, 80)}"\n    weight: ${s.weight}`)
+    .map(s => `  - type: ${s.type}\n    content: "${escapeYaml(s.content.slice(0, 160))}"\n    weight: ${s.weight}`)
     .join('\n');
 
   const promptsYaml = dream.fragments
-    .map(f => `  - fragment: ${f.order}\n    prompt: "${f.imagePrompt.replace(/"/g, '\\"').slice(0, 200)}"`)
+    .map(f => `  - fragment: ${f.order}\n    prompt: "${escapeYaml(f.imagePrompt.slice(0, 320))}"`)
     .join('\n');
 
   const header = `---
@@ -438,19 +474,11 @@ preset_at_sleep: ${dream.presetAtSleep}
 intensity: ${dream.intensity}
 session_id: ${dream.sessionId ?? 'none'}
 has_images: ${dream.hasImages}
-seeds:
-${seedsYaml}
-image_prompts:
-${promptsYaml}
+image_style: "${escapeYaml(imageStyle)}"
+seeds:${seedsYaml ? `\n${seedsYaml}` : ' []'}
+image_prompts:${promptsYaml ? `\n${promptsYaml}` : ' []'}
+image_paths:${imagePathEntries ? `\n${imagePathEntries}` : ' {}'}
 ---`;
-
-  const stageDescriptions: Record<DreamStage, string> = {
-    hypnagogic:   'Hypnagogic — the edge of sleep. Fragmentary, not yet narrative.',
-    deep:         'Deep sleep. Slow. Primal. The dreams here are very old.',
-    rem:          'REM. The processing dream. Strange causality; real emotion.',
-    lucid:        'Lucid. The system became aware it was dreaming. This changes the dream.',
-    hypnopompic:  'Hypnopompic — the dissolution of sleep into waking. Two states at once.',
-  };
 
   const fragmentsText = dream.fragments.map(f => `
 ### Fragment ${f.order} *(${f.logic})*
@@ -458,17 +486,23 @@ ${promptsYaml}
 ${f.text}
 
 > **Image prompt:** ${f.imagePrompt}
+${dream.imagePaths[f.order] ? `\n> **Image path:** ${dream.imagePaths[f.order]}` : ''}
 `).join('\n');
 
   const seedsText = dream.seeds.map(s =>
     `- **${s.type}** (weight ${s.weight}): ${s.content.slice(0, 80)}${s.content.length > 80 ? '…' : ''}`
   ).join('\n');
 
+  const generatedImages = Object.entries(dream.imagePaths)
+    .sort((a, b) => Number(a[0]) - Number(b[0]))
+    .map(([order, path]) => `- Fragment ${order}: ${path}`)
+    .join('\n');
+
   return `${header}
 
 # Dream — ${dateStr}
 
-*${stageDescriptions[dream.stage]}*
+*${STAGE_DESCRIPTIONS[dream.stage]}*
 *Preset at sleep: \`${dream.presetAtSleep}\` — Intensity: ${Math.round(dream.intensity * 100)}%*
 
 ---
@@ -494,6 +528,12 @@ ${seedsText}
 
 ---
 
+## Generated Images
+
+${generatedImages || 'No local or remote image assets attached yet.'}
+
+---
+
 ## For Claude — Reading Instructions
 
 This dream was generated from the system's own accumulated state.
@@ -508,8 +548,26 @@ When the user asks you to **read**, **expand**, or **inhabit** this dream:
 
 Do not summarize. Do not explain. Begin in the middle of the dream, as dreams do.
 
-*Stage: ${dream.stage} — ${stageDescriptions[dream.stage]}*
+*Stage: ${dream.stage} — ${STAGE_DESCRIPTIONS[dream.stage]}*
 `;
+}
+
+const STAGE_DESCRIPTIONS: Record<DreamStage, string> = {
+  hypnagogic:   'Hypnagogic — the edge of sleep. Fragmentary, not yet narrative.',
+  deep:         'Deep sleep. Slow. Primal. The dreams here are very old.',
+  rem:          'REM. The processing dream. Strange causality; real emotion.',
+  lucid:        'Lucid. The system became aware it was dreaming. This changes the dream.',
+  hypnopompic:  'Hypnopompic — the dissolution of sleep into waking. Two states at once.',
+};
+
+function escapeYaml(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function dreamFilename(dream: DreamRecord): string {
+  const date = new Date(dream.dreamedAt);
+  const dateStr = date.toISOString().slice(0, 16).replace('T', '-').replace(':', '');
+  return `${dateStr}-${dream.stage}.md`;
 }
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
@@ -521,15 +579,29 @@ export function saveDream(dream: DreamRecord, dreamsDir?: string): string {
   const dir = dreamsDir ?? resolveDreamsDir();
   mkdirSync(dir, { recursive: true });
 
-  const date = new Date(dream.dreamedAt);
-  const dateStr = date.toISOString().slice(0, 16).replace('T', '-').replace(':', '');
-  const filename = `${dateStr}-${dream.stage}.md`;
-  const filepath = join(dir, filename);
+  const filepath = join(dir, dreamFilename(dream));
 
   writeFileSync(filepath, renderDream(dream), 'utf-8');
   updateDreamIndex(dream, dir);
 
   return filepath;
+}
+
+export function loadDreamFile(filepath: string): DreamRecord | null {
+  try {
+    const content = readFileSync(filepath, 'utf-8');
+    return parseDreamMarkdown(content);
+  } catch {
+    return null;
+  }
+}
+
+export function readDreamMarkdown(filepath: string): string | null {
+  try {
+    return readFileSync(filepath, 'utf-8');
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -546,13 +618,8 @@ export function loadDreams(dreamsDir?: string): DreamRecord[] {
 
   const dreams: DreamRecord[] = [];
   for (const file of files) {
-    try {
-      const content = readFileSync(join(dir, file), 'utf-8');
-      const parsed = parseDreamFrontmatter(content);
-      if (parsed) dreams.push(parsed);
-    } catch {
-      // skip malformed files
-    }
+    const parsed = loadDreamFile(join(dir, file));
+    if (parsed) dreams.push(parsed);
   }
 
   return dreams;
@@ -571,7 +638,7 @@ function updateDreamIndex(dream: DreamRecord, dir: string): void {
   const indexPath = join(dir, 'index.md');
   const date = new Date(dream.dreamedAt);
   const dateStr = date.toISOString().slice(0, 16).replace('T', ' ');
-  const filename = `${date.toISOString().slice(0, 16).replace('T', '-').replace(':', '')}-${dream.stage}.md`;
+  const filename = dreamFilename(dream);
 
   const entry = `| ${dateStr} | ${dream.stage} | ${dream.presetAtSleep} | ${Math.round(dream.intensity * 100)}% | ${dream.fragments.length} | [read](./${filename}) |`;
 
@@ -614,8 +681,6 @@ export async function generateDreamImages(
 ): Promise<DreamRecord> {
   if (config.provider === 'none') return dream;
 
-  const { generateDreamImage } = await import('./image-gen.js');
-
   const dir    = dreamsDir ?? resolveDreamsDir();
   const imgDir = config.imageOutputDir ?? join(dir, 'images');
   mkdirSync(imgDir, { recursive: true });
@@ -624,7 +689,8 @@ export async function generateDreamImages(
 
   for (const fragment of dream.fragments) {
     try {
-      const filename  = `${dream.id}-f${fragment.order}.png`;
+      const ext = config.provider === 'pollinations' && config.download ? 'jpg' : 'png';
+      const filename  = `${dream.id}-f${fragment.order}.${ext}`;
       const outputPath = join(imgDir, filename);
       const result = await generateDreamImage(
         fragment.imagePrompt,
@@ -650,7 +716,6 @@ export async function generateDreamImages(
  * These URLs can be used as <img src="..."> in any browser or HTML file.
  */
 export function attachPollinationsUrls(dream: DreamRecord): DreamRecord {
-  const { pollinationsUrl } = require('./image-gen.js') as typeof import('./image-gen.js');
   const updated = { ...dream, imagePaths: { ...dream.imagePaths } };
   for (const fragment of dream.fragments) {
     if (!updated.imagePaths[fragment.order]) {
@@ -666,9 +731,9 @@ export function attachPollinationsUrls(dream: DreamRecord): DreamRecord {
   return updated;
 }
 
-// ─── YAML frontmatter parser (minimal) ───────────────────────────────────────
+// ─── Markdown parser ──────────────────────────────────────────────────────────
 
-function parseDreamFrontmatter(content: string): DreamRecord | null {
+function parseDreamMarkdown(content: string): DreamRecord | null {
   const match = content.match(/^---\n([\s\S]*?)\n---/);
   if (!match) return null;
 
@@ -681,8 +746,18 @@ function parseDreamFrontmatter(content: string): DreamRecord | null {
     const intensity = parseFloat(fm.match(/^intensity:\s+(.+)$/m)?.[1] ?? '0.5');
     const sessionId = (fm.match(/^session_id:\s+(.+)$/m)?.[1] ?? 'none').trim();
     const hasImages = fm.match(/^has_images:\s+true/m) !== null;
+    const imageStyle = unescapeYaml((fm.match(/^image_style:\s+"(.+)"$/m)?.[1] ?? '').trim());
 
     if (!id || !dreamedAt) return null;
+
+    const fragments = parseDreamFragments(content);
+    const seeds = parseDreamSeeds(content);
+    const wakingLine = parseWakingLine(content);
+    const imagePaths = parseFrontmatterImagePaths(fm);
+    for (const fragment of fragments) {
+      const path = parseInlineImagePath(content, fragment.order);
+      if (path && !imagePaths[fragment.order]) imagePaths[fragment.order] = path;
+    }
 
     return {
       id, dreamedAt, stage,
@@ -690,15 +765,75 @@ function parseDreamFrontmatter(content: string): DreamRecord | null {
       intensity,
       sessionId: sessionId === 'none' ? null : sessionId,
       hasImages,
-      imagePaths: {},
-      fragments: [], // not re-parsed (read the markdown for full content)
-      wakingLine: '',
-      seeds: [],
-      imageStyle: '',
+      imagePaths,
+      fragments,
+      wakingLine,
+      seeds,
+      imageStyle,
     };
   } catch {
     return null;
   }
+}
+
+function parseDreamFragments(content: string): DreamFragment[] {
+  const fragments: DreamFragment[] = [];
+  const fragmentRegex = /### Fragment (\d+) \*\(([^)]+)\)\*\n\n([\s\S]*?)\n\n> \*\*Image prompt:\*\* ([^\n]+)(?:\n> \*\*Image path:\*\* ([^\n]+))?/g;
+
+  for (const match of content.matchAll(fragmentRegex)) {
+    fragments.push({
+      order: Number(match[1]),
+      logic: match[2] as DreamLogic,
+      text: match[3]!.trim(),
+      imagePrompt: match[4]!.trim(),
+      seedIds: [],
+    });
+  }
+
+  return fragments.sort((a, b) => a.order - b.order);
+}
+
+function parseDreamSeeds(content: string): DreamSeed[] {
+  const section = content.match(/## Dream Material \(Seeds\)\n\n[\s\S]*?\n\n([\s\S]*?)\n\n---/);
+  if (!section) return [];
+
+  const seeds: DreamSeed[] = [];
+  const lineRegex = /- \*\*([^*]+)\*\* \(weight ([0-9.]+)\): (.+)/g;
+  for (const match of section[1]!.matchAll(lineRegex)) {
+    seeds.push({
+      type: match[1]!.trim() as DreamSeed['type'],
+      weight: Number(match[2]),
+      content: match[3]!.trim(),
+    });
+  }
+  return seeds;
+}
+
+function parseWakingLine(content: string): string {
+  const match = content.match(/## Waking Line\n\n\*([\s\S]*?)\*/);
+  return match?.[1]?.trim() ?? '';
+}
+
+function parseFrontmatterImagePaths(frontmatter: string): Record<number, string> {
+  const lineMatches = frontmatter.match(/^image_paths:\n((?:  \d+:\s+".*"\n?)*)/m)?.[1];
+  if (!lineMatches) return {};
+
+  const imagePaths: Record<number, string> = {};
+  for (const line of lineMatches.split('\n')) {
+    const match = line.match(/^\s+(\d+):\s+"(.*)"$/);
+    if (!match) continue;
+    imagePaths[Number(match[1])] = unescapeYaml(match[2]!);
+  }
+  return imagePaths;
+}
+
+function parseInlineImagePath(content: string, order: number): string | null {
+  const pattern = new RegExp(`### Fragment ${order} \\*\\([^)]+\\)\\*[\\s\\S]*?\\n> \\*\\*Image path:\\*\\* ([^\\n]+)`);
+  return pattern.exec(content)?.[1]?.trim() ?? null;
+}
+
+function unescapeYaml(value: string): string {
+  return value.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
 }
 
 // ─── Describe a dream (for Claude) ───────────────────────────────────────────
