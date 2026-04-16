@@ -108,16 +108,21 @@ function composeMarket(
   const beats = [
     { label: locale === 'zh' ? '叙事与资金流' : 'Narrative vs flow', content: reading.narrativeVsFlow },
     { label: locale === 'zh' ? '结构' : 'Structure', content: reading.structure },
+    { label: locale === 'zh' ? '研究拆解' : 'Research map', content: reading.researchMap.join(' ') },
+    { label: locale === 'zh' ? '验证晶格' : 'Validation lattice', content: reading.validationLenses.join(' ') },
     { label: locale === 'zh' ? '失效条件' : 'Invalidation', content: reading.invalidation },
     { label: locale === 'zh' ? '风险栈' : 'Risk stack', content: reading.riskStack.join(' ') },
+    { label: locale === 'zh' ? '触发器' : 'Trigger map', content: reading.triggerMap.join(' ') },
+    { label: locale === 'zh' ? '置信度' : 'Confidence', content: reading.confidenceNote },
+    { label: locale === 'zh' ? '执行边界' : 'Execution boundary', content: reading.executionBoundary },
   ];
   const contradiction = options.includeContradiction === false ? undefined : contradictionBeat(input, locale);
   if (contradiction) beats.push(contradiction.beat);
 
   const title = locale === 'zh' ? '市场成品草案' : 'Market Composition Draft';
   const fullDraft = locale === 'zh'
-    ? `${reading.thesis}\n\n先把叙事和真实资金流拆开看：${reading.narrativeVsFlow}\n\n结构上，${reading.structure}\n\n这个判断失效的位置是：${reading.invalidation}\n\n真正要背着走的风险是：${reading.riskStack.join(' ')}${contradiction ? `\n\n${contradiction.paragraph}` : ''}\n\n接下来最值得盯的是：${reading.nextQuestions.join(' ')}`
-    : `${reading.thesis}\n\nFirst separate narrative from actual flow: ${reading.narrativeVsFlow}\n\nStructurally, ${reading.structure}\n\nThis thesis fails here: ${reading.invalidation}\n\nThe real risk stack is: ${reading.riskStack.join(' ')}${contradiction ? `\n\n${contradiction.paragraph}` : ''}\n\nThe next observations that matter are: ${reading.nextQuestions.join(' ')}`;
+    ? `${reading.thesis}\n\n先把叙事和真实资金流拆开看：${reading.narrativeVsFlow}\n\n结构上，${reading.structure}\n\n研究拆解应先这样走：${reading.researchMap.join(' ')}\n\n验证时要过这几层：${reading.validationLenses.join(' ')}\n\n这个判断失效的位置是：${reading.invalidation}\n\n真正要背着走的风险是：${reading.riskStack.join(' ')}\n\n关键触发器是：${reading.triggerMap.join(' ')}\n\n当前置信度判断：${reading.confidenceNote}\n\n执行边界是：${reading.executionBoundary}${contradiction ? `\n\n${contradiction.paragraph}` : ''}\n\n接下来最值得盯的是：${reading.nextQuestions.join(' ')}`
+    : `${reading.thesis}\n\nFirst separate narrative from actual flow: ${reading.narrativeVsFlow}\n\nStructurally, ${reading.structure}\n\nThe research path should run like this: ${reading.researchMap.join(' ')}\n\nValidation has to pass through these lenses: ${reading.validationLenses.join(' ')}\n\nThis thesis fails here: ${reading.invalidation}\n\nThe real risk stack is: ${reading.riskStack.join(' ')}\n\nThe key triggers are: ${reading.triggerMap.join(' ')}\n\nThe current confidence call is: ${reading.confidenceNote}\n\nThe execution boundary is: ${reading.executionBoundary}${contradiction ? `\n\n${contradiction.paragraph}` : ''}\n\nThe next observations that matter are: ${reading.nextQuestions.join(' ')}`;
 
   return {
     field: 'market',

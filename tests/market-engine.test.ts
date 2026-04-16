@@ -12,6 +12,12 @@ describe('market engine', () => {
 
     expect(reading.narrativeVsFlow).toContain('Headline positive');
     expect(reading.signalStack.join(' ')).toContain('Guidance Cut');
+    expect(reading.researchMap.length).toBeGreaterThan(2);
+    expect(reading.validationLenses.join(' ')).toContain('Price acceptance');
+    expect(reading.executionBoundary).toContain('research frame');
+    expect(reading.referenceTimeIso).toContain('T');
+    expect(reading.latestDataRule).toContain('freshest available data');
+    expect(reading.dataStatus).toContain('without attached live external data');
   });
 
   test('composes a live-structure reading from snapshot and technicals', () => {
@@ -77,7 +83,14 @@ describe('market engine', () => {
     const rendered = renderMarketReading(reading);
 
     expect(reading.thesis).toContain('上升结构');
+    expect(reading.triggerMap.length).toBeGreaterThan(1);
+    expect(reading.confidenceNote).toContain('置信度');
+    expect(reading.dataStatus).toContain('Binance');
     expect(rendered).toContain('【Phosphene Market Read】');
+    expect(rendered).toContain('研究拆解');
+    expect(rendered).toContain('参考时间');
+    expect(rendered).toContain('最新资料规则');
+    expect(rendered).toContain('执行边界');
     expect(rendered).toContain('失效条件');
   });
 });

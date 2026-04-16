@@ -13,9 +13,10 @@
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'fs';
 import { homedir }  from 'os';
-import { join } from 'path';
+import { join, relative, resolve as resolvePath } from 'path';
 import { generateDreamImage, pollinationsUrl } from './image-gen.js';
 import { deriveBiasCandidates, detectHumanPatterns } from './contradiction-engine.js';
+import { PRESETS } from './presets.js';
 import type {
   DreamRecord,
   DreamStage,
@@ -25,14 +26,41 @@ import type {
   DreamImageConfig,
   EvolutionState,
   PhospheneContext,
+  PresetName,
 } from './types.js';
+
+const DREAM_MARKDOWN_ORIGIN = 'phosphene-dream';
+const DREAM_SCHEMA_VERSION = 2;
+const DREAM_VISUAL_PROFILE = 'anchored-environmental-v1';
+const DREAM_PROMPT_REVISION = 3;
 
 // ─── Path resolution ──────────────────────────────────────────────────────────
 
 export function resolveDreamsDir(): string {
+  const mylaudeDir = join(process.cwd(), '.mylaude', 'dreams');
+  if (existsSync(join(process.cwd(), '.mylaude'))) return mylaudeDir;
   const hermesDir = join(homedir(), '.hermes', 'dreams');
   if (existsSync(join(homedir(), '.hermes'))) return hermesDir;
   return join(process.cwd(), 'dreams');
+}
+
+export function isManagedDreamFile(filepath: string, dreamsDir?: string): boolean {
+  const archiveDir = resolvePath(dreamsDir ?? resolveDreamsDir());
+  const resolvedFile = resolvePath(filepath);
+  if (!resolvedFile.startsWith(`${archiveDir}/`) || !resolvedFile.endsWith('.md')) {
+    return false;
+  }
+
+  if (!existsSync(resolvedFile)) {
+    return true;
+  }
+
+  try {
+    const content = readFileSync(resolvedFile, 'utf-8');
+    return hasDreamSignature(content) || parseDreamMarkdown(content, { allowLegacy: true }) !== null;
+  } catch {
+    return false;
+  }
 }
 
 // ─── Stage determination ──────────────────────────────────────────────────────
@@ -310,12 +338,112 @@ function generateWakingLine(fragments: DreamFragment[], stage: DreamStage): stri
 
 // ─── Image prompt construction ────────────────────────────────────────────────
 
-function buildImagePrompt(fragment: DreamFragment, imageStyle: string, stage: DreamStage): string {
-  // Extract the visual essence from the fragment text
-  // Focus on the most concrete noun phrase in the text
-  const text = fragment.text;
-  const sentences = text.split(/[.!?]/).filter(s => s.trim().length > 10);
-  const visualSentence = sentences[0] ?? text.slice(0, 80);
+const PRESET_VISUAL_ANCHORS: Record<string, string[]> = {
+  clear: ['empty room in pale morning light', 'glass of water on a plain wooden table', 'open window with thin white curtain'],
+  liminal: ['long corridor with mixed blue and amber light', 'half-open doorway at the edge of vision', 'vacant transit hall after rain'],
+  'deep-flux': ['sunken chamber flooded with violet and gold reflections', 'stacked stairwell descending into water-dark silence', 'weathered altar of glass and rust'],
+  dissolution: ['amber smoke moving through impossible geometry', 'melting threshold between room and sky', 'fractured mirror planes with no stable horizon'],
+  code: ['cyan blueprint wall over black space', 'terminal glow across engineered scaffolds', 'architectural wireframe suspended in darkness'],
+  design: ['poster-scale color field pinned to a studio wall', 'cut-paper composition table with ruled margins', 'editorial layout fragments drifting over matte board'],
+  research: ['atlas table covered in diagrams and specimen labels', 'archive drawers half-open under brass task lights', 'etched scientific plate beside ink notes'],
+  writing: ['vellum desk with ink wash bleeding at the edges', 'annotated manuscript beside extinguished candle smoke', 'gold-flecked margin notes on heavy paper'],
+  ideation: ['collision board of torn images and taped notes', 'prototype objects arranged on a critique table', 'surreal workshop of unfinished forms'],
+  review: ['forensic inspection table under hard white lamp', 'single artifact isolated against dark velvet', 'close-read markup spread beside a lens'],
+  flow: ['rice paper with one irreversible brushstroke', 'quiet studio floor at first light', 'minimal workspace emptied of all but one tool'],
+};
+
+const DREAM_STOPWORDS = new Set([
+  'the', 'and', 'with', 'from', 'that', 'this', 'there', 'into', 'then', 'they', 'their', 'what', 'when',
+  'while', 'have', 'been', 'still', 'only', 'very', 'than', 'which', 'through', 'before', 'after', 'inside',
+  'outside', 'thing', 'things', 'same', 'again', 'version', 'understood', 'something', 'nothing', 'without',
+  'because', 'where', 'would', 'could', 'should', 'room', 'idea', 'pattern', 'concept', 'language', 'dream',
+]);
+
+function extractVisualKeywords(text: string, limit = 3): string[] {
+  const tokens = text
+    .toLowerCase()
+    .replace(/\[[^\]]+\]/g, ' ')
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .split(/\s+/)
+    .map(token => token.trim())
+    .filter(token => token.length >= 4 && !DREAM_STOPWORDS.has(token) && !/^\d+$/.test(token));
+
+  return Array.from(new Set(tokens)).slice(0, limit);
+}
+
+function describeSeedAsVisual(seed: DreamSeed): string[] {
+  const label = seed.content.split(':')[0]!.replace(/^\[[^\]]+\]\s*/, '').trim();
+  const keywords = extractVisualKeywords(seed.content, 2);
+
+  switch (seed.type) {
+    case 'crystallized':
+      return [
+        `inscription wall carrying the phrase "${label.slice(0, 36)}"`,
+        keywords.length > 0 ? `${keywords.join(' and ')} etched into metal panels` : 'engraved diagram fragments on stone',
+      ];
+    case 'signal':
+      return [
+        `${label} arriving as pressure ripples in air`,
+        keywords.length > 0 ? `instrument panel reacting to ${keywords.join(' and ')}` : 'faint waveform sliding across glass',
+      ];
+    case 'voice':
+      return [
+        `empty chair reserved for "${label}"`,
+        'presence implied by displacement, not by a visible person',
+      ];
+    case 'personal-preset':
+    case 'preset':
+      return [`threshold marked "${label}"`, 'named chamber with architectural signage'];
+    case 'optimal-point':
+      return [
+        `cross-section of the moment called "${label}"`,
+        'load-bearing layers exposed like geological strata',
+      ];
+    case 'behavioral-pattern':
+      return [
+        `${label} appearing as weather over a built environment`,
+        keywords.length > 0 ? `${keywords.join(' and ')} encoded into the skyline` : 'repeating marks on concrete',
+      ];
+    case 'temperament':
+      return [`instrument tuned to "${label}"`, 'recurring calibration marks on brass and paper'];
+    default:
+      return keywords.length > 0 ? [`material traces of ${keywords.join(' and ')}`] : ['symbolic debris across the floor'];
+  }
+}
+
+function uniqueAnchors(values: string[]): string[] {
+  return Array.from(new Set(values.map(value => value.trim()).filter(Boolean)));
+}
+
+function buildVisualAnchors(fragment: DreamFragment, seeds: DreamSeed[], preset: string): string[] {
+  const presetAnchors = PRESET_VISUAL_ANCHORS[preset] ?? ['surreal architectural interior', 'symbolic object arrangement'];
+  const seedAnchors = seeds.flatMap(describeSeedAsVisual);
+  const textKeywords = extractVisualKeywords(fragment.text, 2);
+  const textAnchors = textKeywords.length > 0
+    ? [`motifs of ${textKeywords.join(' and ')}`, `objects shaped by ${textKeywords.join(' and ')}`]
+    : [];
+
+  return uniqueAnchors([
+    ...presetAnchors,
+    ...seedAnchors,
+    ...textAnchors,
+  ]).slice(0, 6);
+}
+
+function needsPortraitGuardrails(seeds: DreamSeed[], preset: string): boolean {
+  return preset === 'clear'
+    || seeds.length <= 1
+    || seeds.every(seed => seed.type === 'preset' || seed.type === 'personal-preset');
+}
+
+function buildImagePrompt(
+  fragment: DreamFragment,
+  imageStyle: string,
+  stage: DreamStage,
+  seeds: DreamSeed[],
+  context: PhospheneContext,
+): string {
+  const anchors = buildVisualAnchors(fragment, seeds, context.preset);
 
   const stageQuality: Record<DreamStage, string> = {
     hypnagogic:   'fragmentary, incomplete, flickering, edge-of-vision, not-quite-formed',
@@ -325,7 +453,11 @@ function buildImagePrompt(fragment: DreamFragment, imageStyle: string, stage: Dr
     hypnopompic:  'dissolving at edges, reality bleeding in from one side, two states simultaneously visible',
   };
 
-  return `${visualSentence.trim()}, ${stageQuality[stage]}, ${imageStyle}, cinematic composition, high detail in subject, --ar 16:9`;
+  const composition = needsPortraitGuardrails(seeds, context.preset)
+    ? 'environmental dream scene, still-life symbolism, architectural framing, no human portrait, no centered woman, no face close-up, no glamour photography'
+    : 'environmental storytelling, wide cinematic framing, figures only when necessary, never portrait-led';
+
+  return `${anchors.join(', ')}, ${stageQuality[stage]}, ${imageStyle}, ${composition}, layered depth, tactile materials, high detail, --ar 16:9`;
 }
 
 // ─── Fragment assembly ────────────────────────────────────────────────────────
@@ -385,7 +517,13 @@ function assembleFragments(
       logic,
       seedIds: [i, ...(logic === 'meeting' ? [i + 1] : [])].filter(id => id < seeds.length),
     };
-    fragment.imagePrompt = buildImagePrompt(fragment, imageStyle, stage);
+    fragment.imagePrompt = buildImagePrompt(
+      fragment,
+      imageStyle,
+      stage,
+      [seed, ...(logic === 'meeting' ? [nextSeed] : [])],
+      context,
+    );
     fragments.push(fragment);
   }
 
@@ -424,7 +562,7 @@ export function generateDream(
   const intensity = Math.min(1, (sigCount / 20) * 0.5 + layerAvg * 0.5);
 
   return {
-    id: `dream-${Date.now().toString(36)}`,
+    id: `dream-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     dreamedAt: new Date().toISOString(),
     stage,
     sessionId: session?.id ?? null,
@@ -433,9 +571,13 @@ export function generateDream(
     fragments,
     wakingLine: waking,
     seeds,
+    visualProfile: DREAM_VISUAL_PROFILE,
+    promptRevision: DREAM_PROMPT_REVISION,
     imageStyle: style,
     hasImages: false,
     imagePaths: {},
+    imageBackend: null,
+    imageModel: null,
   };
 }
 
@@ -467,14 +609,20 @@ export function renderDream(dream: DreamRecord): string {
     .join('\n');
 
   const header = `---
+origin: ${DREAM_MARKDOWN_ORIGIN}
+schema_version: ${DREAM_SCHEMA_VERSION}
 id: ${dream.id}
 dreamed_at: ${dream.dreamedAt}
 stage: ${dream.stage}
 preset_at_sleep: ${dream.presetAtSleep}
 intensity: ${dream.intensity}
 session_id: ${dream.sessionId ?? 'none'}
+visual_profile: ${dream.visualProfile}
+prompt_revision: ${dream.promptRevision}
 has_images: ${dream.hasImages}
 image_style: "${escapeYaml(imageStyle)}"
+image_backend: ${dream.imageBackend ?? 'none'}
+image_model: "${escapeYaml(dream.imageModel ?? 'none')}"
 seeds:${seedsYaml ? `\n${seedsYaml}` : ' []'}
 image_prompts:${promptsYaml ? `\n${promptsYaml}` : ' []'}
 image_paths:${imagePathEntries ? `\n${imagePathEntries}` : ' {}'}
@@ -582,15 +730,34 @@ export function saveDream(dream: DreamRecord, dreamsDir?: string): string {
   const filepath = join(dir, dreamFilename(dream));
 
   writeFileSync(filepath, renderDream(dream), 'utf-8');
-  updateDreamIndex(dream, dir);
+  updateDreamIndex(dir);
+  updateDreamGallery(dir);
 
   return filepath;
 }
 
+export function saveDreamSnapshot(
+  dream: DreamRecord,
+  dreamsDir?: string,
+): { filepath: string; dream: DreamRecord } {
+  const filepath = saveDream(dream, dreamsDir);
+  return {
+    filepath,
+    dream: loadDreamFile(filepath) ?? dream,
+  };
+}
+
 export function loadDreamFile(filepath: string): DreamRecord | null {
+  return loadDreamFileWithOptions(filepath, { allowLegacy: true });
+}
+
+function loadDreamFileWithOptions(
+  filepath: string,
+  options: { allowLegacy?: boolean } = {},
+): DreamRecord | null {
   try {
     const content = readFileSync(filepath, 'utf-8');
-    return parseDreamMarkdown(content);
+    return parseDreamMarkdown(content, options);
   } catch {
     return null;
   }
@@ -608,6 +775,13 @@ export function readDreamMarkdown(filepath: string): string | null {
  * Load all dream records from the dreams directory.
  */
 export function loadDreams(dreamsDir?: string): DreamRecord[] {
+  return loadDreamsWithOptions(dreamsDir, { allowLegacy: true });
+}
+
+function loadDreamsWithOptions(
+  dreamsDir?: string,
+  options: { allowLegacy?: boolean } = {},
+): DreamRecord[] {
   const dir = dreamsDir ?? resolveDreamsDir();
   if (!existsSync(dir)) return [];
 
@@ -618,7 +792,7 @@ export function loadDreams(dreamsDir?: string): DreamRecord[] {
 
   const dreams: DreamRecord[] = [];
   for (const file of files) {
-    const parsed = loadDreamFile(join(dir, file));
+    const parsed = loadDreamFileWithOptions(join(dir, file), options);
     if (parsed) dreams.push(parsed);
   }
 
@@ -634,33 +808,29 @@ export function loadLatestDream(dreamsDir?: string): DreamRecord | null {
 
 // ─── Dream index ──────────────────────────────────────────────────────────────
 
-function updateDreamIndex(dream: DreamRecord, dir: string): void {
+function updateDreamIndex(dir: string): void {
   const indexPath = join(dir, 'index.md');
-  const date = new Date(dream.dreamedAt);
-  const dateStr = date.toISOString().slice(0, 16).replace('T', ' ');
-  const filename = dreamFilename(dream);
+  const dreams = loadDreams(dir);
+  const entries = dreams.map(dream => {
+    const date = new Date(dream.dreamedAt);
+    const dateStr = date.toISOString().slice(0, 16).replace('T', ' ');
+    const filename = dreamFilename(dream);
+    return `| ${dateStr} | ${dream.stage} | ${dream.presetAtSleep} | ${Math.round(dream.intensity * 100)}% | ${dream.fragments.length} | [read](./${filename}) |`;
+  }).join('\n');
 
-  const entry = `| ${dateStr} | ${dream.stage} | ${dream.presetAtSleep} | ${Math.round(dream.intensity * 100)}% | ${dream.fragments.length} | [read](./${filename}) |`;
-
-  if (!existsSync(indexPath)) {
-    writeFileSync(indexPath, `# Dream Archive
+  writeFileSync(indexPath, `# Dream Archive
 
 *The accumulated sleep of the system.*
 
 | Date | Stage | Preset | Intensity | Fragments | File |
 |------|-------|--------|-----------|-----------|------|
-${entry}
+${entries || '| - | - | - | - | - | - |'}
 `, 'utf-8');
-    return;
-  }
+}
 
-  const current = readFileSync(indexPath, 'utf-8');
-  // Insert after the header row
-  const updated = current.replace(
-    /(\| Date \| Stage \|.*\n\|[-| ]+\|\n)/,
-    `$1${entry}\n`,
-  );
-  writeFileSync(indexPath, updated, 'utf-8');
+function updateDreamGallery(dir: string): void {
+  const galleryPath = join(dir, 'gallery.html');
+  writeFileSync(galleryPath, renderDreamGallery(loadDreams(dir), dir), 'utf-8');
 }
 
 // ─── Optional: Image generation ───────────────────────────────────────────────
@@ -683,25 +853,52 @@ export async function generateDreamImages(
 
   const dir    = dreamsDir ?? resolveDreamsDir();
   const imgDir = config.imageOutputDir ?? join(dir, 'images');
-  mkdirSync(imgDir, { recursive: true });
+  const needsLocalFiles = config.provider !== 'pollinations' || config.download !== false;
+  if (needsLocalFiles) {
+    mkdirSync(imgDir, { recursive: true });
+  }
 
-  const updatedDream = { ...dream, imagePaths: { ...dream.imagePaths } };
+  const updatedDream = {
+    ...dream,
+    imagePaths: { ...dream.imagePaths },
+    imageBackend: config.provider ?? 'pollinations',
+    imageModel: resolveDreamImageModel(config),
+  };
 
   for (const fragment of dream.fragments) {
+    const ext = config.provider === 'pollinations' && config.download !== false ? 'jpg' : 'png';
+    const filename = `${dream.id}-f${fragment.order}.${ext}`;
+    const outputPath = needsLocalFiles ? join(imgDir, filename) : undefined;
+    const fragmentSeed = createDreamImageSeed(dream.id, fragment.order);
+
     try {
-      const ext = config.provider === 'pollinations' && config.download ? 'jpg' : 'png';
-      const filename  = `${dream.id}-f${fragment.order}.${ext}`;
-      const outputPath = join(imgDir, filename);
       const result = await generateDreamImage(
         fragment.imagePrompt,
         dream.imageStyle,
         config,
         outputPath,
-        fragment.order, // use order as deterministic seed for Pollinations
+        fragmentSeed,
       );
       updatedDream.imagePaths[fragment.order] = result.path;
       updatedDream.hasImages = true;
     } catch (err) {
+      if (config.provider === 'pollinations' && config.download !== false) {
+        try {
+          const fallback = await generateDreamImage(
+            fragment.imagePrompt,
+            dream.imageStyle,
+            { ...config, download: false },
+            undefined,
+            fragmentSeed,
+          );
+          updatedDream.imagePaths[fragment.order] = fallback.path;
+          updatedDream.hasImages = true;
+          console.warn(`[phosphene-dreams] Local download failed for fragment ${fragment.order}; attached remote Pollinations URL instead.`);
+          continue;
+        } catch (fallbackErr) {
+          console.warn(`[phosphene-dreams] Pollinations fallback failed for fragment ${fragment.order}:`, fallbackErr);
+        }
+      }
       console.warn(`[phosphene-dreams] Image generation failed for fragment ${fragment.order}:`, err);
     }
   }
@@ -710,20 +907,57 @@ export async function generateDreamImages(
   return updatedDream;
 }
 
+export function refreshDreamVisuals(
+  dream: DreamRecord,
+  options: { preserveAssets?: boolean } = {},
+): DreamRecord {
+  const context = contextFromDream(dream);
+  const refreshedFragments = dream.fragments.map((fragment, index) => {
+    const fragmentSeeds = inferFragmentSeeds(dream, fragment, index);
+    return {
+      ...fragment,
+      seedIds: fragment.seedIds.length > 0 ? fragment.seedIds : inferSeedIds(dream, fragment, index),
+      imagePrompt: buildImagePrompt(
+        fragment,
+        dream.imageStyle,
+        dream.stage,
+        fragmentSeeds,
+        context,
+      ),
+    };
+  });
+
+  return {
+    ...dream,
+    fragments: refreshedFragments,
+    visualProfile: DREAM_VISUAL_PROFILE,
+    promptRevision: DREAM_PROMPT_REVISION,
+    hasImages: options.preserveAssets ? dream.hasImages : false,
+    imagePaths: options.preserveAssets ? { ...dream.imagePaths } : {},
+    imageBackend: options.preserveAssets ? dream.imageBackend : null,
+    imageModel: options.preserveAssets ? dream.imageModel : null,
+  };
+}
+
 /**
  * Generate Pollinations URLs for all fragments without downloading.
  * Zero-config, works for everyone — returns the dream with URLs in imagePaths.
  * These URLs can be used as <img src="..."> in any browser or HTML file.
  */
 export function attachPollinationsUrls(dream: DreamRecord): DreamRecord {
-  const updated = { ...dream, imagePaths: { ...dream.imagePaths } };
+  const updated = {
+    ...dream,
+    imagePaths: { ...dream.imagePaths },
+    imageBackend: 'pollinations',
+    imageModel: resolveDreamImageModel({ provider: 'pollinations' }),
+  };
   for (const fragment of dream.fragments) {
     if (!updated.imagePaths[fragment.order]) {
       updated.imagePaths[fragment.order] = pollinationsUrl(
         fragment.imagePrompt,
         dream.imageStyle,
         {},
-        fragment.order,
+        createDreamImageSeed(dream.id, fragment.order),
       );
     }
   }
@@ -731,23 +965,299 @@ export function attachPollinationsUrls(dream: DreamRecord): DreamRecord {
   return updated;
 }
 
+export function renderDreamGallery(dreams: DreamRecord[], dreamsDir?: string): string {
+  const dir = dreamsDir ?? resolveDreamsDir();
+  const cards = dreams.map(dream => {
+    const filename = dreamFilename(dream);
+    const stale = dreamNeedsVisualRefresh(dream);
+    const imageEntries = Object.entries(dream.imagePaths)
+      .sort((a, b) => Number(a[0]) - Number(b[0]))
+      .map(([order, path]) => ({ order: Number(order), path }));
+    const localCount = imageEntries.filter(entry => !isRemoteAsset(entry.path)).length;
+    const remoteCount = imageEntries.length - localCount;
+    const imageStrip = imageEntries.length > 0
+      ? imageEntries.map(entry => `
+          <figure class="dream-shot">
+            <img src="${escapeHtml(toGalleryHref(entry.path, dir))}" alt="Dream ${escapeHtml(dream.id)} fragment ${entry.order}" loading="lazy" />
+            <figcaption>Fragment ${entry.order}</figcaption>
+          </figure>
+        `).join('\n')
+      : '<div class="dream-empty">No image assets attached yet.</div>';
+
+    return `
+      <article class="dream-card">
+        <header class="dream-head">
+          <div>
+            <p class="dream-stamp">${escapeHtml(formatDreamStamp(dream.dreamedAt))}</p>
+            <h2>${escapeHtml(dream.stage)} <span>${escapeHtml(dream.presetAtSleep)}</span>${stale ? ' <em class="dream-stale">stale</em>' : ''}</h2>
+          </div>
+          <div class="dream-meta">
+            <span>${dream.fragments.length} fragments</span>
+            <span>${Math.round(dream.intensity * 100)}% intensity</span>
+            <span>${localCount} local / ${remoteCount} remote</span>
+            <span>${escapeHtml(dream.visualProfile)} · r${dream.promptRevision}</span>
+          </div>
+        </header>
+        <p class="dream-line">${escapeHtml(dream.wakingLine)}</p>
+        <div class="dream-actions">
+          <a href="${escapeHtml(filename)}">Open markdown</a>
+          <a href="./index.md">Open archive index</a>
+        </div>
+        <section class="dream-strip">
+          ${imageStrip}
+        </section>
+      </article>
+    `;
+  }).join('\n');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Phosphene Dream Archive</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0a0f17;
+      --panel: rgba(17, 24, 39, 0.88);
+      --panel-border: rgba(148, 163, 184, 0.18);
+      --text: #edf2ff;
+      --muted: #9fb0cc;
+      --accent: #8dd3ff;
+      --accent-soft: rgba(141, 211, 255, 0.14);
+      --shadow: 0 22px 60px rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+      background:
+        radial-gradient(circle at top, rgba(59, 130, 246, 0.18), transparent 38%),
+        radial-gradient(circle at 20% 20%, rgba(236, 72, 153, 0.14), transparent 26%),
+        linear-gradient(180deg, #02040a 0%, var(--bg) 100%);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 40px 20px 72px;
+    }
+
+    .shell {
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+
+    .hero {
+      margin-bottom: 28px;
+      padding: 28px;
+      border: 1px solid var(--panel-border);
+      border-radius: 28px;
+      background: linear-gradient(180deg, rgba(10, 15, 23, 0.92), rgba(14, 22, 35, 0.84));
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+
+    .hero h1 {
+      margin: 0 0 8px;
+      font-size: clamp(2rem, 5vw, 4rem);
+      line-height: 0.95;
+      letter-spacing: -0.04em;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 760px;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.7;
+    }
+
+    .dream-grid {
+      display: grid;
+      gap: 20px;
+    }
+
+    .dream-card {
+      padding: 22px;
+      border-radius: 24px;
+      border: 1px solid var(--panel-border);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+    }
+
+    .dream-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+      margin-bottom: 14px;
+    }
+
+    .dream-head h2 {
+      margin: 0;
+      font-size: clamp(1.3rem, 3vw, 2rem);
+      text-transform: capitalize;
+    }
+
+    .dream-head h2 span {
+      color: var(--accent);
+      font-size: 0.62em;
+      margin-left: 10px;
+      text-transform: none;
+      letter-spacing: 0.02em;
+    }
+
+    .dream-stale {
+      display: inline-flex;
+      margin-left: 10px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(251, 191, 36, 0.32);
+      background: rgba(251, 191, 36, 0.12);
+      color: #fcd34d;
+      font-style: normal;
+      font-size: 0.42em;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      vertical-align: middle;
+    }
+
+    .dream-stamp {
+      margin: 0 0 6px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 0.72rem;
+    }
+
+    .dream-meta {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .dream-meta span,
+    .dream-actions a {
+      display: inline-flex;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--text);
+      font-size: 0.84rem;
+      text-decoration: none;
+      border: 1px solid rgba(141, 211, 255, 0.16);
+    }
+
+    .dream-line {
+      margin: 0 0 18px;
+      color: var(--text);
+      line-height: 1.7;
+      font-size: 1rem;
+    }
+
+    .dream-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .dream-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+    }
+
+    .dream-shot {
+      margin: 0;
+      overflow: hidden;
+      border-radius: 18px;
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      background: rgba(2, 6, 12, 0.78);
+    }
+
+    .dream-shot img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      object-fit: cover;
+      background: #02040a;
+    }
+
+    .dream-shot figcaption,
+    .dream-empty {
+      padding: 10px 12px;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .dream-empty {
+      border-radius: 18px;
+      border: 1px dashed rgba(148, 163, 184, 0.18);
+      background: rgba(2, 6, 12, 0.55);
+    }
+
+    @media (max-width: 720px) {
+      body { padding: 20px 14px 44px; }
+      .dream-head { flex-direction: column; }
+      .dream-meta { justify-content: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <h1>Dream Archive</h1>
+      <p>Local-first dream viewing for Phosphene. Each dream keeps its markdown source, attached image assets, and waking line together so the archive opens instantly from disk.</p>
+    </section>
+    <section class="dream-grid">
+      ${cards || '<article class="dream-card"><div class="dream-empty">No dreams recorded yet.</div></article>'}
+    </section>
+  </main>
+</body>
+</html>`;
+}
+
+export function saveDreamGallery(dreamsDir?: string): string {
+  const dir = dreamsDir ?? resolveDreamsDir();
+  mkdirSync(dir, { recursive: true });
+  const galleryPath = join(dir, 'gallery.html');
+  writeFileSync(galleryPath, renderDreamGallery(loadDreams(dir), dir), 'utf-8');
+  return galleryPath;
+}
+
 // ─── Markdown parser ──────────────────────────────────────────────────────────
 
-function parseDreamMarkdown(content: string): DreamRecord | null {
+function parseDreamMarkdown(
+  content: string,
+  options: { allowLegacy?: boolean } = {},
+): DreamRecord | null {
   const match = content.match(/^---\n([\s\S]*?)\n---/);
   if (!match) return null;
 
   try {
     const fm = match[1]!;
+    const origin = (fm.match(/^origin:\s+(.+)$/m)?.[1] ?? '').trim();
+    const schemaVersion = Number((fm.match(/^schema_version:\s+(.+)$/m)?.[1] ?? '').trim() || '0');
     const id        = (fm.match(/^id:\s+(.+)$/m)?.[1] ?? '').trim();
     const dreamedAt = (fm.match(/^dreamed_at:\s+(.+)$/m)?.[1] ?? '').trim();
     const stage     = (fm.match(/^stage:\s+(.+)$/m)?.[1] ?? 'rem').trim() as DreamStage;
     const preset    = (fm.match(/^preset_at_sleep:\s+(.+)$/m)?.[1] ?? 'clear').trim();
     const intensity = parseFloat(fm.match(/^intensity:\s+(.+)$/m)?.[1] ?? '0.5');
     const sessionId = (fm.match(/^session_id:\s+(.+)$/m)?.[1] ?? 'none').trim();
+    const visualProfile = (fm.match(/^visual_profile:\s+(.+)$/m)?.[1] ?? '').trim();
+    const promptRevision = Number((fm.match(/^prompt_revision:\s+(.+)$/m)?.[1] ?? '').trim() || '0');
     const hasImages = fm.match(/^has_images:\s+true/m) !== null;
     const imageStyle = unescapeYaml((fm.match(/^image_style:\s+"(.+)"$/m)?.[1] ?? '').trim());
+    const imageBackend = (fm.match(/^image_backend:\s+(.+)$/m)?.[1] ?? 'none').trim();
+    const imageModel = unescapeYaml((fm.match(/^image_model:\s+"(.+)"$/m)?.[1] ?? 'none').trim());
 
+    const signed = origin === DREAM_MARKDOWN_ORIGIN && schemaVersion >= 2;
+    const legacy = !origin && !schemaVersion;
+    if (!signed && !(options.allowLegacy && legacy)) return null;
     if (!id || !dreamedAt) return null;
 
     const fragments = parseDreamFragments(content);
@@ -764,12 +1274,16 @@ function parseDreamMarkdown(content: string): DreamRecord | null {
       presetAtSleep: preset,
       intensity,
       sessionId: sessionId === 'none' ? null : sessionId,
+      visualProfile: visualProfile || 'legacy',
+      promptRevision: promptRevision || 1,
       hasImages,
       imagePaths,
       fragments,
       wakingLine,
       seeds,
       imageStyle,
+      imageBackend: imageBackend === 'none' ? null : imageBackend,
+      imageModel: imageModel === 'none' ? null : imageModel,
     };
   } catch {
     return null;
@@ -832,8 +1346,102 @@ function parseInlineImagePath(content: string, order: number): string | null {
   return pattern.exec(content)?.[1]?.trim() ?? null;
 }
 
+function hasDreamSignature(content: string): boolean {
+  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!match) return false;
+  const fm = match[1]!;
+  const origin = (fm.match(/^origin:\s+(.+)$/m)?.[1] ?? '').trim();
+  const schemaVersion = Number((fm.match(/^schema_version:\s+(.+)$/m)?.[1] ?? '').trim() || '0');
+  return origin === DREAM_MARKDOWN_ORIGIN && schemaVersion >= 2;
+}
+
+function resolveDreamImageModel(config: DreamImageConfig): string | null {
+  const provider = config.provider ?? 'pollinations';
+  if (config.model) return config.model;
+
+  switch (provider) {
+    case 'pollinations':
+      return 'flux';
+    case 'hf':
+      return 'black-forest-labs/FLUX.1-schnell';
+    case 'openai':
+      return 'dall-e-3';
+    case 'local':
+      return 'automatic1111';
+    case 'stability':
+      return 'stability-default';
+    default:
+      return null;
+  }
+}
+
+export function dreamNeedsVisualRefresh(dream: DreamRecord): boolean {
+  return dream.visualProfile !== DREAM_VISUAL_PROFILE || dream.promptRevision < DREAM_PROMPT_REVISION;
+}
+
 function unescapeYaml(value: string): string {
   return value.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+}
+
+function createDreamImageSeed(dreamId: string, fragmentOrder: number): number {
+  let hash = 2166136261;
+  const input = `${dreamId}:${fragmentOrder}`;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function contextFromDream(dream: DreamRecord): PhospheneContext {
+  const presetKey = (dream.presetAtSleep in PRESETS ? dream.presetAtSleep : 'clear') as PresetName;
+  return {
+    state: PRESETS[presetKey].state,
+    preset: presetKey,
+    sessionId: dream.sessionId ?? `dream-refresh-${dream.id}`,
+    activatedAt: dream.dreamedAt,
+  };
+}
+
+function inferSeedIds(dream: DreamRecord, fragment: DreamFragment, index: number): number[] {
+  if (fragment.logic === 'meeting') {
+    return [index, index + 1].filter(id => id < dream.seeds.length);
+  }
+  if (fragment.logic === 'architecture') {
+    return [index, index + 1, index + 2].filter(id => id < dream.seeds.length);
+  }
+  return [Math.min(index, Math.max(dream.seeds.length - 1, 0))].filter(id => id >= 0 && dream.seeds[id]);
+}
+
+function inferFragmentSeeds(dream: DreamRecord, fragment: DreamFragment, index: number): DreamSeed[] {
+  const ids = fragment.seedIds.length > 0 ? fragment.seedIds : inferSeedIds(dream, fragment, index);
+  const resolved = ids
+    .map(id => dream.seeds[id])
+    .filter((seed): seed is DreamSeed => Boolean(seed));
+
+  return resolved.length > 0 ? resolved : (dream.seeds[0] ? [dream.seeds[0]] : []);
+}
+
+function formatDreamStamp(iso: string): string {
+  return new Date(iso).toISOString().slice(0, 16).replace('T', ' ');
+}
+
+function isRemoteAsset(path: string): boolean {
+  return /^https?:\/\//i.test(path);
+}
+
+function toGalleryHref(path: string, dreamsDir: string): string {
+  if (isRemoteAsset(path)) return path;
+  return relative(dreamsDir, path).split('\\').join('/');
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 // ─── Describe a dream (for Claude) ───────────────────────────────────────────

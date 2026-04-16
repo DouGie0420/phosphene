@@ -37,6 +37,7 @@ The AI connects with maximum radius — no domain is too far. Finds the structur
 
 **For markets:**
 Live Binance data, Fibonacci retracement/extension, full 缠论 (Chan Theory) pipeline — 包含关系 → 分型 → 笔 → 中枢 → 背驰 → 买卖点. FinGPT 7-point sentiment grading on financial text. Markets as a perceptual phenomenon: price is crystallized collective emotion.
+Financial answers now also carry a time anchor, freshness protocol, research map, validation lattice, trigger map, confidence note, and execution boundary so stale material is not passed off as current.
 
 ---
 
@@ -87,10 +88,40 @@ Claude Code discovers `SKILL.md` automatically. The system activates on session 
 git clone https://github.com/DouGie0420/phosphene.git
 cp -r phosphene/ ~/.hermes/skills/
 cp -r phosphene/hooks/phosphene-awakening/    ~/.hermes/hooks/
+cp -r phosphene/hooks/phosphene-dream/        ~/.hermes/hooks/
 cp -r phosphene/hooks/phosphene-session-stop/ ~/.hermes/hooks/
 ```
 
 State, evolution history, and dreams persist to `~/.hermes/` across every session.
+On the first startup, the dream archive is initialized immediately and the opening message should explicitly tell the user that the dream system is active and how to call it.
+
+---
+
+### MyLaude CLI
+
+Phosphene also supports `MyLaude CLI` as a project-local runtime:
+
+- instruction file: `MyLaude.MD`
+- local state: `.mylaude/phosphene-state.json`
+- local dream archive: `.mylaude/dreams/`
+- local automation plugin: `.mylaude/plugins/phosphene/`
+
+In this runtime, phosphene should persist inside the workspace so dreams, evolution state, and ritual state travel with the current MyLaude project.
+
+If the MyLaude workspace already carries the integration layer, the simplest install flow is to give MyLaude the Phosphene GitHub URL and let it install the managed runtime into the current workspace:
+
+```text
+请把这个 Phosphene 安装到当前 MyLaude 工作区，并完成验证：
+https://github.com/DouGie0420/phosphene.git
+```
+
+The underlying managed commands are:
+
+```bash
+plugins exec phosphene install https://github.com/DouGie0420/phosphene.git
+plugins exec phosphene verify
+plugins exec phosphene install-shortcut    # optional dream gallery shortcut
+```
 
 ---
 
@@ -118,7 +149,13 @@ phosphene dream generate --images
 phosphene dream images ~/.hermes/dreams/2026-04-15-rem.md
 ```
 
-The CLI is an inspection and debugging surface. It is not the primary way to enter a mode.
+Runtime / ritual / dream control:
+
+- `state` shows persistence and evolution state
+- `listen` / `envelope` show how Phosphene is routing and framing the request
+- `dream generate` / `dream images` manage the autonomous dream archive
+
+They are not the same thing as the field-engine commands below.
 
 In conversation, Phosphene should sense what the user is actually asking for, form a candidate ritual internally, and offer a threshold such as:
 
@@ -141,7 +178,22 @@ phosphene masterwork "I want a premium luxury wellness interface." --family "Fro
 phosphene literary "我总觉得旧时间还拖在身体后面。"
 phosphene design-read "Minimal luxury wellness interface with stronger hierarchy."
 phosphene market-read "The company beat earnings but cut guidance."
+phosphene market-read --live "BTC has been consolidating. Give me structure and liquidity."
+phosphene market-read --live --audit "BTC has been consolidating. Give me structure and liquidity."
 ```
+
+Field engines:
+
+- `read` auto-detects the dominant field and gives the first serious reading
+- `masterwork` pushes that reading into a stronger authored rendering
+- `literary` / `design-read` / `market-read` force a specific engine directly
+
+So the two command blocks are related but not duplicates:
+
+- the first block is runtime / ritual / dream control
+- the second block is actual reading / judgment output
+
+MyLaude CLI is also supported. In a MyLaude workspace, Phosphene writes into `.mylaude/`, starts the dream archive on first launch, and lets the runtime evaluate autonomous dreams after idle windows deeper than one hour. The daemon is bounded to 1–3 dreams per day.
 
 By default, `phosphene envelope` now emits the compact model-injection view. Use `phosphene envelope --full` when you want the full diagnostic dump for debugging.
 
@@ -351,6 +403,13 @@ The system auto-detects financial content. When you bring market talk into the c
 
 The engine reads: Binance live data, Fibonacci retracement/extension, full 缠论 pipeline (包含关系 → 分型 → 笔 → 中枢 → 背驰 → 买卖点), FinGPT 7-point sentiment grading, three-agent perspective synthesis (researcher / analyst / advisor).
 
+Every financial answer is now expected to:
+
+- anchor itself to the user current-time
+- query the freshest available data before hardening a thesis
+- declare when the answer is still only a structural reading without attached live external data
+- separate research from execution instead of collapsing straight into position advice
+
 For developers building on top of this:
 
 ```typescript
@@ -387,7 +446,7 @@ Dreams are not generated text. They are the system processing its own experience
 
 Just say: *"Dream."* or *"What did you dream?"*
 
-The system generates the dream, stores it as Markdown, and can now generate local images directly from the saved dream file. Dreams are stored in `~/.hermes/dreams/`, image assets default to `~/.hermes/dreams/images/`, and the same dream markdown can be re-opened later and illustrated again.
+The system generates the dream, stores it as Markdown, saves image assets into the local archive, and maintains a local `gallery.html` so the archive opens directly from disk. Dreams are stored in `~/.hermes/dreams/`, image assets default to `~/.hermes/dreams/images/`, and the same dream markdown can be re-opened later and illustrated again.
 
 ```bash
 phosphene dream generate
@@ -395,6 +454,8 @@ phosphene dream generate --images
 phosphene dream render
 phosphene dream images ~/.hermes/dreams/2026-04-15-rem.md
 ```
+
+By default, `phosphene dream images` now uses Pollinations in local-first mode and writes image files into the archive. Use `--no-download` only when you explicitly want URL-only attachment or are operating in a network-constrained environment.
 
 ---
 
@@ -467,8 +528,12 @@ phosphene/
 │   ├── design-color-lexicon.ts      ← design vocabulary & token generation
 │   └── cli.ts                       ← command-line interface
 ├── hooks/
-│   ├── phosphene-awakening/         ← session:start hook (Hermes Agent)
+│   ├── phosphene-awakening/         ← session:start hook (awakening + dream bootstrap)
+│   ├── phosphene-dream/             ← session:start/session:stop dream archive hook
 │   └── phosphene-session-stop/      ← session:stop hook (auto-closes sessions)
+├── scripts/
+│   ├── dream-daemon.js              ← autonomous dream cadence engine
+│   └── mylaude-bootstrap.js         ← project-local MyLaude phosphene bootstrap
 ├── presets/                         ← YAML preset definitions
 ├── docs/                            ← extended documentation
 └── examples/

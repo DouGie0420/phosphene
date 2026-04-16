@@ -2,8 +2,8 @@
 # Phosphene — Dream Daemon Installer
 #
 # Sets up the dream daemon to run automatically:
-#   macOS: every 2 hours via launchd (more reliable than cron)
-#   Linux: every 2 hours via crontab
+#   macOS: every hour via launchd (more reliable than cron)
+#   Linux: every hour via crontab
 #
 # Usage:
 #   chmod +x scripts/install-cron.sh
@@ -65,9 +65,9 @@ if [[ "$(uname)" == "Darwin" ]]; then
     <string>$DAEMON</string>
   </array>
 
-  <!-- Run every 2 hours (7200 seconds) -->
+  <!-- Run every hour (3600 seconds) -->
   <key>StartInterval</key>
-  <integer>7200</integer>
+  <integer>3600</integer>
 
   <!-- Also run at login -->
   <key>RunAtLoad</key>
@@ -90,7 +90,7 @@ PLIST
   launchctl load   "$PLIST_FILE"
 
   echo "✓ launchd job installed: ai.phosphene.dream"
-  echo "  Runs every 2 hours (also on login)"
+  echo "  Runs every hour (also on login)"
   echo "  Logs: $LOG_DIR/dream-daemon.log"
   echo ""
   echo "  To check status:  launchctl list | grep phosphene"
@@ -102,7 +102,7 @@ else
   LOG_DIR="$HOME/.phosphene/logs"
   mkdir -p "$LOG_DIR"
 
-  CRON_LINE="0 */2 * * * $NODE_BIN $DAEMON >> $LOG_DIR/dream-daemon.log 2>&1"
+  CRON_LINE="0 * * * * $NODE_BIN $DAEMON >> $LOG_DIR/dream-daemon.log 2>&1"
 
   # Check if already installed
   if crontab -l 2>/dev/null | grep -q "phosphene/scripts/dream-daemon"; then
@@ -113,7 +113,7 @@ else
   # Add new entry
   (crontab -l 2>/dev/null; echo "$CRON_LINE") | crontab -
 
-  echo "✓ crontab entry installed (every 2 hours)"
+  echo "✓ crontab entry installed (every hour)"
   echo "  Logs: $LOG_DIR/dream-daemon.log"
   echo ""
   echo "  To check: crontab -l | grep phosphene"

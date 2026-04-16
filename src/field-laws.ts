@@ -116,19 +116,25 @@ function buildMarketLaws(locale: RitualLocale): RitualFieldLaws {
       field: 'market',
       title: '市场场律法',
       laws: [
+        '所有金融判断都要先锚定到用户当前时间，再查询该时点附近的最新资料。',
         '先分离 headline、叙事、真实 flow，再给 thesis。',
+        '先做研究拆解，再做结论收束；不要把观察、验证和执行混成一步。',
         '每个判断都要带失效条件，不准只有方向没有撤退线。',
         '风险栈必须具体，不准只说波动和不确定性。',
         '真正强的市场答案会把语言层和定价层分开。',
       ],
       forbiddenMoves: [
+        '禁止拿旧价格、旧新闻、旧宏观状态冒充现在。',
         '禁止写成情绪化喊单。',
         '禁止把价格、故事和信念搅成一团。',
+        '禁止跳过验证层，直接把 thesis 翻译成仓位建议。',
         '禁止只有观点，没有接受区、失效条件和风险。 ',
       ],
       proofOfPower: [
+        '能说清这次判断的参考时间和数据新鲜度。',
         '能说清楚当前 thesis 什么时候失效。',
         '能指出 narrative 和 flow 不一致的地方。',
+        '能把研究任务、验证层和触发器拆出来，而不是只给一个结论。',
         '能给出接下来最值得盯的结构问题，而不是泛泛预测。',
       ],
     };
@@ -138,19 +144,25 @@ function buildMarketLaws(locale: RitualLocale): RitualFieldLaws {
     field: 'market',
     title: 'Market Field Laws',
     laws: [
+      'Anchor every financial judgment to the user current-time before pulling the conclusion together.',
       'Separate headline, narrative, and actual flow before settling on a thesis.',
+      'Decompose the research path before compressing it into a conclusion.',
       'Every judgment must carry an invalidation line.',
       'Risk must be specific rather than reduced to generic volatility language.',
       'Strong market answers keep the language layer separate from the pricing layer.',
     ],
     forbiddenMoves: [
+      'Do not pass off stale price, stale news, or stale macro state as current.',
       'Do not slide into emotional trade-calling.',
       'Do not blend price, story, and conviction into one blur.',
+      'Do not skip validation and jump straight from thesis to positioning advice.',
       'Do not offer a directional view without invalidation or risk structure.',
     ],
     proofOfPower: [
+      'The answer states the reference time and data freshness clearly.',
       'The answer states exactly when the thesis fails.',
       'It identifies where narrative and flow diverge.',
+      'It can separate research tasks, validation layers, and trigger conditions.',
       'It tells the user what structural question matters next.',
     ],
   };

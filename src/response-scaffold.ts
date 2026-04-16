@@ -52,10 +52,16 @@ function zhSections(field: CommonField, input?: string): ResponseScaffoldSection
       case 'market':
         return [
           { label: '主判断', instruction: '先给当前市场或文本最核心的 thesis。' },
+          { label: '时间锚点', instruction: '先把用户当前时间当作判断基准，并以这个时刻去拉最新资料。' },
           { label: '叙事与资金流', instruction: '拆开 headline、story、真实 flow，不要混写。' },
           { label: '结构', instruction: '说明当前处在什么结构、接受区或阶段。' },
+          { label: '研究拆解', instruction: '把问题拆成 3-4 个研究任务，先定义该验证什么。' },
+          { label: '验证晶格', instruction: '至少从价格、流动性、传播度或基本面中选 2-4 层交叉验证。' },
           { label: '失效条件', instruction: '明确 thesis 在哪里失效，不能含糊。' },
           { label: '风险栈', instruction: '列出最重要的 2-4 个风险，不要只说波动。' },
+          { label: '触发器', instruction: '给出接下来会改变判断的价格、事件或流动性触发器。' },
+          { label: '置信度', instruction: '说明为什么现在只能给到高、中或低置信度，不准装成确定。' },
+          { label: '执行边界', instruction: '把研究判断和执行决定分开，说明在什么条件下才进入仓位讨论。' },
           { label: '下一步观察', instruction: '给出接下来最该盯的价格、流动性或事件问题。' },
         ];
       case 'design':
@@ -91,10 +97,16 @@ function enSections(field: CommonField, input?: string): ResponseScaffoldSection
       case 'market':
         return [
           { label: 'Thesis', instruction: 'State the core market thesis first.' },
+          { label: 'Time anchor', instruction: 'Anchor the analysis to the user current-time first and query the freshest available data around that moment.' },
           { label: 'Narrative vs flow', instruction: 'Separate headline, story, and actual flow; do not blend them.' },
           { label: 'Structure', instruction: 'Describe the current phase, acceptance zone, or structural condition.' },
+          { label: 'Research map', instruction: 'Break the problem into 3-4 research tasks before trying to conclude.' },
+          { label: 'Validation lattice', instruction: 'Cross-check the thesis through 2-4 layers such as price, flow, dissemination, or fundamentals.' },
           { label: 'Invalidation', instruction: 'State exactly where the thesis fails.' },
           { label: 'Risk stack', instruction: 'List the 2-4 real risks that matter most.' },
+          { label: 'Trigger map', instruction: 'Name the prices, events, or flow changes that would update the judgment.' },
+          { label: 'Confidence', instruction: 'Explain why the current confidence is high, medium, or low instead of performing certainty.' },
+          { label: 'Execution boundary', instruction: 'Keep research and execution separate; say what must be confirmed before position-taking is discussed.' },
           { label: 'Next observations', instruction: 'Name the next prices, flows, or events worth watching.' },
         ];
       case 'design':

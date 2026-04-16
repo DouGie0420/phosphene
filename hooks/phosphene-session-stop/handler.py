@@ -17,8 +17,11 @@ from pathlib import Path
 
 
 def _resolve_state_path() -> Path:
+    mylaude = Path.cwd() / ".mylaude"
     hermes = Path.home() / ".hermes"
     claude = Path.home() / ".claude"
+    if mylaude.exists():
+        return mylaude / "phosphene-state.json"
     if hermes.exists():
         return hermes / "phosphene-state.json"
     if claude.exists():

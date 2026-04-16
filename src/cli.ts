@@ -8,7 +8,7 @@
 //   listen <text>          Process a natural-language turn through the session engine
 //   envelope <text>        Emit a compact ritual envelope for model/session injection
 //     --full               Emit the full diagnostic envelope without render elision
-//   wow [runtime] [locale] Emit a first-five-minutes wow pack
+//   wow [runtime] [locale] Emit an opening-runtime guidance pack
 //   read <text>            Auto-detect a common field and emit a deep reading
 //   masterwork <text>      Emit a style-family-aware masterwork rendering
 //     --field <name>       Force route: design | literature | market
@@ -16,6 +16,8 @@
 //   literary <text>        Run the literary close-reading engine
 //   design-read <text>     Run the design/color judgment engine
 //   market-read <text>     Run the financial language engine
+//     --live               Attach latest external market/news context
+//     --audit              Show freshness/source-hit audit for live context
 //   preset <name>          Apply a named preset
 //   presets                List all available presets
 //   signal <type>          Record a feedback signal (amplify|reduce|calibrate|crystallize|anchor|reject)
@@ -55,6 +57,11 @@ import {
   renderMarketReading,
 } from './market-engine.js';
 import {
+  fetchFinancialLiveContext,
+  renderFinancialLiveContext,
+  renderFinancialLiveAudit,
+} from './finance-live-context.js';
+import {
   generateDesignTokens,
   suggestDesignSystem,
 } from './design-color-lexicon.js';
@@ -68,13 +75,18 @@ import type { KlineInterval } from './market-data.js';
 import {
   generateDream,
   saveDream,
+  saveDreamSnapshot,
   loadDreams,
   loadLatestDream,
   loadDreamFile,
   renderDream,
   describeDream,
   generateDreamImages,
+  refreshDreamVisuals,
   resolveDreamsDir,
+  isManagedDreamFile,
+  dreamNeedsVisualRefresh,
+  saveDreamGallery,
 } from './dreams.js';
 import { PRESETS } from './presets.js';
 import type { DreamImageConfig, FeedbackSignalType, PresetName, VoiceName } from './types.js';
@@ -99,7 +111,7 @@ async function main(): Promise<void> {
     case 'masterwork':  return cmdMasterwork(args);
     case 'literary':    return cmdLiterary(args.join(' ').trim());
     case 'design-read': return cmdDesignRead(args.join(' ').trim());
-    case 'market-read': return cmdMarketRead(args.join(' ').trim());
+    case 'market-read': return await cmdMarketRead(args);
     case 'preset':      return cmdPreset(args[0]);
     case 'presets':     return cmdListPresets();
     case 'signal':      return cmdSignal(args[0], args.slice(1));
@@ -227,7 +239,7 @@ function cmdEnvelope(args: string[]): void {
 }
 
 function cmdWow(runtime?: string, locale?: string): void {
-  const resolvedRuntime = (runtime ?? 'generic') as 'claude' | 'hermes' | 'openclaw' | 'generic';
+  const resolvedRuntime = (runtime ?? 'generic') as 'claude' | 'hermes' | 'mylaude' | 'openclaw' | 'generic';
   const resolvedLocale = (locale ?? 'zh') as 'zh' | 'en';
   const pack = buildWowPack(resolvedRuntime, resolvedLocale);
   console.log('\n' + renderWowPack(pack) + '\n');
@@ -313,13 +325,54 @@ function cmdDesignRead(input: string): void {
   console.log('\n' + renderDesignReading(readDesignIntent(input)) + '\n');
 }
 
-function cmdMarketRead(input: string): void {
+async function cmdMarketRead(args: string[]): Promise<void> {
+  let live = false;
+  let audit = false;
+  let symbol: string | undefined;
+  const textParts: string[] = [];
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--live') {
+      live = true;
+      continue;
+    }
+    if (args[i] === '--audit') {
+      audit = true;
+      continue;
+    }
+    if (args[i] === '--symbol' && args[i + 1]) {
+      symbol = args[++i];
+      continue;
+    }
+    textParts.push(args[i]!);
+  }
+
+  const input = textParts.join(' ').trim();
   if (!input) {
-    console.error('Usage: phosphene market-read "<financial text>"');
+    console.error('Usage: phosphene market-read [--live] [--audit] [--symbol BTCUSDT] "<financial text>"');
     process.exit(1);
   }
 
-  console.log('\n' + renderMarketReading(readMarketText(input)) + '\n');
+  const reading = readMarketText(input);
+  console.log('\n' + renderMarketReading(reading) + '\n');
+
+  if (!live) return;
+
+  try {
+    const context = await fetchFinancialLiveContext(input, {
+      locale: reading.locale,
+      referenceTime: new Date(),
+      symbol,
+    });
+    console.log(renderFinancialLiveContext(context) + '\n');
+    if (audit) {
+      console.log(renderFinancialLiveAudit(context) + '\n');
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`Live finance context failed: ${message}`);
+    process.exit(1);
+  }
 }
 
 // ─── preset ───────────────────────────────────────────────────────────────────
@@ -395,6 +448,8 @@ async function cmdDream(args: string[]): Promise<void> {
     case 'render':   return cmdDreamRender(rest[0]);
     case 'generate': return await cmdDreamGenerate(rest);
     case 'images':   return await cmdDreamImages(rest);
+    case 'refresh':  return await cmdDreamRefresh(rest);
+    case 'audit':    return cmdDreamAudit(rest);
     default:         return cmdDreamShow();
   }
 }
@@ -407,6 +462,8 @@ function cmdDreamShow(): void {
     return;
   }
   console.log('\n' + describeDream(dream) + '\n');
+  console.log(`  Visual: ${dream.visualProfile} · r${dream.promptRevision} · ${dreamNeedsVisualRefresh(dream) ? 'stale' : 'current'}`);
+  console.log(`  Assets: ${renderDreamAssetState(dream)}`);
   console.log(`  Archive: ${resolveDreamsDir()}`);
   console.log('  Run "phosphene dream render" to see the full dream text.\n');
 }
@@ -419,23 +476,30 @@ function cmdDreamList(): void {
   }
 
   console.log(`\n╔═══ Dream Archive — ${dreams.length} dream${dreams.length === 1 ? '' : 's'} ═══╗\n`);
-  console.log(`  ${'Date'.padEnd(17)} ${'Stage'.padEnd(13)} ${'Preset'.padEnd(15)} Int   Frags`);
-  console.log(`  ${'─'.repeat(60)}`);
+  console.log(`  ${'Date'.padEnd(17)} ${'Stage'.padEnd(13)} ${'Preset'.padEnd(15)} Int   Frags  State`);
+  console.log(`  ${'─'.repeat(74)}`);
   for (const dream of dreams) {
     const date = new Date(dream.dreamedAt).toISOString().slice(0, 16).replace('T', ' ');
     const img  = dream.hasImages ? '✦' : ' ';
-    console.log(`  ${img} ${date}  ${dream.stage.padEnd(12)} ${dream.presetAtSleep.padEnd(14)} ${String(Math.round(dream.intensity * 100)).padStart(3)}%`);
+    const status = dreamNeedsVisualRefresh(dream) ? 'stale' : 'current';
+    console.log(`  ${img} ${date}  ${dream.stage.padEnd(12)} ${dream.presetAtSleep.padEnd(14)} ${String(Math.round(dream.intensity * 100)).padStart(3)}%  ${String(dream.fragments.length).padStart(5)}  ${status}`);
   }
   console.log('');
 }
 
 function cmdDreamRender(inputPath?: string): void {
-  const { dream } = loadDreamTarget(inputPath);
+  const { dream, filepath } = loadDreamTarget(inputPath);
   if (!dream) {
+    if (filepath) {
+      console.log('\n  Dream render only accepts markdown recorded inside the Phosphene dream archive.\n');
+      console.log(`  Archive: ${resolveDreamsDir()}\n`);
+      return;
+    }
     console.log('\n  No dreams recorded.\n');
     return;
   }
   console.log(renderDream(dream));
+  console.log(`\n[Dream Visual State] ${dream.visualProfile} · r${dream.promptRevision} · ${dreamNeedsVisualRefresh(dream) ? 'stale' : 'current'} · ${renderDreamAssetState(dream)}`);
 }
 
 async function cmdDreamGenerate(args: string[]): Promise<void> {
@@ -453,11 +517,17 @@ async function cmdDreamGenerate(args: string[]): Promise<void> {
 
   let dream = generateDream(evo, finalContext);
   const dreamsDir = resolveDreamsDir();
-  const filepath = saveDream(dream, dreamsDir);
+  const snapshot = saveDreamSnapshot(dream, dreamsDir);
+  const filepath = snapshot.filepath;
+  dream = snapshot.dream;
 
   if (shouldGenerateImages) {
-    dream = await generateDreamImages(dream, normalizeDreamImageConfig(imageOptions), dreamsDir);
+    dream = await generateDreamImages(loadDreamFile(filepath) ?? dream, normalizeDreamImageConfig(imageOptions), dreamsDir);
+    dream = loadDreamFile(filepath) ?? dream;
   }
+
+  const galleryPath = saveDreamGallery(dreamsDir);
+  const assetSummary = summarizeDreamAssets(dream);
 
   console.log(`\n  ✓ Dream generated: ${dream.stage}`);
   console.log(`  Fragments: ${dream.fragments.length} | Intensity: ${Math.round(dream.intensity * 100)}%`);
@@ -466,10 +536,20 @@ async function cmdDreamGenerate(args: string[]): Promise<void> {
   }
   console.log(`  Saved: ${filepath}`);
   if (shouldGenerateImages) {
-    const outputDir = imageOptions.imageOutputDir ?? resolve(dreamsDir, 'images');
-    console.log(`  Images: ${Object.keys(dream.imagePaths).length} generated`);
-    console.log(`  Image dir: ${outputDir}`);
+    console.log(`  Images attached: ${assetSummary.total}`);
+    console.log(`  Assets: ${assetSummary.local} local | ${assetSummary.remote} remote`);
+    if (assetSummary.local > 0) {
+      console.log(`  Image dir: ${imageOptions.imageOutputDir ?? resolve(dreamsDir, 'images')}`);
+    }
+    if (assetSummary.remote > 0 && assetSummary.local === 0) {
+      console.log('  Mode: remote fallback (local download unavailable or disabled)');
+    } else if (normalizeDreamImageConfig(imageOptions).provider === 'pollinations' && normalizeDreamImageConfig(imageOptions).download !== false) {
+      console.log('  Mode: local-first download');
+    } else {
+      console.log('  Mode: explicit remote URL attachment');
+    }
   }
+  console.log(`  Gallery: ${galleryPath}`);
   console.log('\n  Run "phosphene dream render" to read it.\n');
 }
 
@@ -477,6 +557,11 @@ async function cmdDreamImages(args: string[]): Promise<void> {
   const sourcePath = args.find(arg => !arg.startsWith('--'));
   const { dream, dreamsDir, filepath } = loadDreamTarget(sourcePath);
   if (!dream || !dreamsDir) {
+    if (filepath) {
+      console.log('\n  Dream image generation only accepts markdown recorded by Phosphene inside the dream archive.\n');
+      console.log(`  Archive: ${resolveDreamsDir()}\n`);
+      return;
+    }
     console.log('\n  No dream markdown found.\n');
     console.log('  Usage: phosphene dream images [path/to/dream.md] [--provider pollinations|hf|openai|local] [--out dir]\n');
     return;
@@ -488,11 +573,163 @@ async function cmdDreamImages(args: string[]): Promise<void> {
     normalizeDreamImageConfig(options),
     dreamsDir,
   );
+  const galleryPath = saveDreamGallery(dreamsDir);
+  const count = Object.keys(updated.imagePaths).length;
+  const normalized = normalizeDreamImageConfig(options);
+  const assetSummary = summarizeDreamAssets(updated);
 
-  console.log(`\n  ✓ Images generated for dream: ${updated.id}`);
+  console.log(`\n  ✓ Dream image pass complete: ${updated.id}`);
   console.log(`  Source: ${filepath ?? 'latest dream in archive'}`);
-  console.log(`  Count:  ${Object.keys(updated.imagePaths).length}`);
-  console.log(`  Output: ${options.imageOutputDir ?? resolve(dreamsDir, 'images')}\n`);
+  console.log(`  Count:  ${count}`);
+  console.log(`  Assets: ${assetSummary.local} local | ${assetSummary.remote} remote`);
+  if (assetSummary.local > 0) {
+    console.log(`  Output: ${options.imageOutputDir ?? resolve(dreamsDir, 'images')}`);
+  }
+  if (normalized.provider === 'pollinations' && normalized.download !== false) {
+    console.log('  Mode:   local-first download');
+  } else {
+    console.log('  Mode:   remote URL attachment');
+  }
+  console.log(`  Gallery: ${galleryPath}`);
+  if (count === 0) {
+    console.log('  Result: no images were attached. Check provider, network, or local backend availability.\n');
+    return;
+  }
+  if (assetSummary.remote > 0) {
+    console.log('  Result: some fragments are using remote URLs because local image saving was unavailable or disabled.');
+  }
+  console.log('');
+}
+
+async function cmdDreamRefresh(args: string[]): Promise<void> {
+  const shouldGenerateImages = args.includes('--images');
+  const refreshAll = args.includes('--all');
+  const refreshStale = args.includes('--stale');
+  const sourcePath = args.find(arg => !arg.startsWith('--'));
+  const options = parseDreamImageOptions(args);
+  const normalized = normalizeDreamImageConfig(options);
+
+  const allTargets = refreshAll || refreshStale
+    ? loadDreams(resolveDreamsDir()).map(dream => ({ dream, dreamsDir: resolveDreamsDir(), filepath: null as string | null }))
+    : [loadDreamTarget(sourcePath)];
+  const targets = refreshStale
+    ? allTargets.filter(target => target.dream && dreamNeedsVisualRefresh(target.dream))
+    : allTargets;
+
+  const validTargets = targets.filter(target => target.dream && target.dreamsDir) as Array<{
+    dream: NonNullable<ReturnType<typeof loadLatestDream>>;
+    dreamsDir: string;
+    filepath: string | null;
+  }>;
+
+  if (validTargets.length === 0) {
+    if (sourcePath) {
+      console.log('\n  Dream refresh only accepts markdown recorded by Phosphene inside the dream archive.\n');
+      console.log(`  Archive: ${resolveDreamsDir()}\n`);
+      return;
+    }
+    if (refreshStale) {
+      console.log('\n  No stale dreams need refresh right now.\n');
+      console.log(`  Archive: ${resolveDreamsDir()}\n`);
+      return;
+    }
+    console.log('\n  No dream markdown found to refresh.\n');
+    console.log('  Usage: phosphene dream refresh [file] [--all|--stale] [--images] [--provider pollinations|hf|openai|local]\n');
+    return;
+  }
+
+  let refreshedCount = 0;
+  let imageCount = 0;
+  let localAssets = 0;
+  let remoteAssets = 0;
+  let galleryPath = '';
+
+  for (const target of validTargets) {
+    let refreshed = refreshDreamVisuals(target.dream);
+    const snapshot = saveDreamSnapshot(refreshed, target.dreamsDir);
+    refreshed = snapshot.dream;
+    refreshedCount += 1;
+
+    if (shouldGenerateImages) {
+      refreshed = await generateDreamImages(
+        refreshed,
+        normalized,
+        target.dreamsDir,
+      );
+      refreshed = loadDreamFile(snapshot.filepath) ?? refreshed;
+      const assetSummary = summarizeDreamAssets(refreshed);
+      imageCount += assetSummary.total;
+      localAssets += assetSummary.local;
+      remoteAssets += assetSummary.remote;
+    }
+
+    galleryPath = saveDreamGallery(target.dreamsDir);
+  }
+
+  console.log(`\n  ✓ Dream visuals refreshed: ${refreshedCount}`);
+  if (shouldGenerateImages) {
+    console.log(`  Images attached: ${imageCount}`);
+    console.log(`  Assets: ${localAssets} local | ${remoteAssets} remote`);
+    if (normalized.provider === 'pollinations' && normalized.download !== false) {
+      console.log('  Mode: local-first refresh');
+    } else {
+      console.log('  Mode: remote URL refresh');
+    }
+  }
+  if (galleryPath) {
+    console.log(`  Gallery: ${galleryPath}`);
+  }
+  console.log('');
+}
+
+function cmdDreamAudit(args: string[]): void {
+  const onlyStale = args.includes('--stale');
+  const onlyMissing = args.includes('--missing-images');
+  const onlyRemote = args.includes('--remote-only');
+  const dreams = loadDreams();
+
+  if (dreams.length === 0) {
+    console.log('\n  No dreams recorded yet.\n');
+    return;
+  }
+
+  const filtered = dreams.filter(dream => {
+    const assetState = getDreamAssetState(dream);
+    if (onlyStale && !dreamNeedsVisualRefresh(dream)) return false;
+    if (onlyMissing && assetState.total > 0) return false;
+    if (onlyRemote && assetState.remote === 0) return false;
+    return true;
+  });
+
+  const staleCount = dreams.filter(dreamNeedsVisualRefresh).length;
+  const withImages = dreams.filter(dream => getDreamAssetState(dream).total > 0).length;
+  const remoteFallback = dreams.filter(dream => {
+    const assetState = getDreamAssetState(dream);
+    return assetState.total > 0 && assetState.local === 0 && assetState.remote > 0;
+  }).length;
+
+  console.log(`\n╔═══ Dream Audit ═══╗\n`);
+  console.log(`  Total:         ${dreams.length}`);
+  console.log(`  Stale:         ${staleCount}`);
+  console.log(`  With images:   ${withImages}`);
+  console.log(`  Remote-only:   ${remoteFallback}`);
+  console.log(`  Archive:       ${resolveDreamsDir()}`);
+  console.log('');
+
+  if (filtered.length === 0) {
+    console.log('  No dreams matched the current audit filter.\n');
+    return;
+  }
+
+  console.log(`  ${'Date'.padEnd(17)} ${'Stage'.padEnd(13)} ${'State'.padEnd(8)} ${'Assets'.padEnd(18)} Visual`);
+  console.log(`  ${'─'.repeat(92)}`);
+  for (const dream of filtered) {
+    const date = new Date(dream.dreamedAt).toISOString().slice(0, 16).replace('T', ' ');
+    const state = dreamNeedsVisualRefresh(dream) ? 'stale' : 'current';
+    const assets = renderDreamAssetState(dream);
+    console.log(`  ${date}  ${dream.stage.padEnd(12)} ${state.padEnd(8)} ${assets.padEnd(18)} ${dream.visualProfile} · r${dream.promptRevision}`);
+  }
+  console.log('');
 }
 
 function parseDreamImageOptions(args: string[]): DreamImageConfig {
@@ -530,6 +767,10 @@ function parseDreamImageOptions(args: string[]): DreamImageConfig {
     }
     if (arg === '--download') {
       options.download = true;
+      continue;
+    }
+    if (arg === '--no-download') {
+      options.download = false;
     }
   }
 
@@ -544,6 +785,36 @@ function normalizeDreamImageConfig(options: DreamImageConfig): DreamImageConfig 
   };
 }
 
+function summarizeDreamAssets(dream: { imagePaths: Record<number, string> }): {
+  total: number;
+  local: number;
+  remote: number;
+} {
+  const paths = Object.values(dream.imagePaths);
+  const remote = paths.filter(path => /^https?:\/\//i.test(path)).length;
+  return {
+    total: paths.length,
+    local: paths.length - remote,
+    remote,
+  };
+}
+
+function getDreamAssetState(dream: { imagePaths: Record<number, string> }): {
+  total: number;
+  local: number;
+  remote: number;
+} {
+  return summarizeDreamAssets(dream);
+}
+
+function renderDreamAssetState(dream: { imagePaths: Record<number, string> }): string {
+  const assetState = getDreamAssetState(dream);
+  if (assetState.total === 0) return 'no-images';
+  if (assetState.local > 0 && assetState.remote === 0) return `${assetState.local} local`;
+  if (assetState.local === 0 && assetState.remote > 0) return `${assetState.remote} remote`;
+  return `${assetState.local} local / ${assetState.remote} remote`;
+}
+
 function loadDreamTarget(inputPath?: string): {
   dream: ReturnType<typeof loadLatestDream>;
   dreamsDir: string | null;
@@ -551,6 +822,13 @@ function loadDreamTarget(inputPath?: string): {
 } {
   if (inputPath) {
     const filepath = resolve(inputPath);
+    if (!isManagedDreamFile(filepath)) {
+      return {
+        dream: null,
+        dreamsDir: null,
+        filepath,
+      };
+    }
     return {
       dream: loadDreamFile(filepath),
       dreamsDir: dirname(filepath),
@@ -962,7 +1240,7 @@ function cmdHelp(): void {
   phosphene envelope "<text>"      Emit a compact ritual envelope for model/session injection
   phosphene envelope --full "<text>"
                                    Emit the full diagnostic envelope
-  phosphene wow [runtime] [locale] Emit a first-five-minutes wow pack
+  phosphene wow [runtime] [locale] Emit an opening-runtime guidance pack
   phosphene read "<text>"          Auto-detect a common field and emit a deep reading
   phosphene masterwork "<text>"    Emit a style-family-aware masterwork rendering
     --field design|literature|market
@@ -970,6 +1248,10 @@ function cmdHelp(): void {
   phosphene literary "<text>"      Literary close reading
   phosphene design-read "<text>"   Design, color, and motion judgment
   phosphene market-read "<text>"   Financial text reading
+  phosphene market-read --live "<text>"
+                                   Financial reading + latest external context
+    --audit                        Show freshness / source-hit audit for live context
+    --symbol BTCUSDT               Override inferred symbol for live context
   phosphene preset <name>          Apply a named preset
   phosphene presets                List all available presets
   phosphene signal <type>          Record a feedback signal
@@ -978,10 +1260,20 @@ function cmdHelp(): void {
     --voice <name>                 Associate with a voice
   phosphene dream                  Show the most recent dream
   phosphene dream list             List all recorded dreams
+  phosphene dream audit            Audit stale / missing / remote-only dreams
+    --stale                        Show only stale dreams
+    --missing-images               Show only dreams without image assets
+    --remote-only                  Show only dreams using remote-only assets
   phosphene dream render [file]    Print full dream markdown
   phosphene dream generate         Generate a new dream from current state
+  phosphene dream refresh [file]   Rebuild dream image prompts for one file
+    --all                          Refresh the full dream archive
+    --stale                        Refresh only stale dreams in the archive
+    --images                       Re-attach images after refreshing prompts
     --images                       Generate local images immediately after writing the dream
     --provider <name>              pollinations | hf | openai | local | none
+    --download                     For pollinations, force local file download
+    --no-download                  For pollinations, keep remote URLs only
     --out <dir>                    Write images to a specific directory
   phosphene dream images [file]    Generate local images for latest or specified dream markdown
   phosphene market <symbol> [int]  Live market data + Fibonacci + 缠论 analysis

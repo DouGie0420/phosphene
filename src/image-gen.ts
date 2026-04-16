@@ -2,15 +2,16 @@
 //
 // Backend priority (lowest friction first):
 //
-//   1. pollinations  free · no API key · FLUX model · URL = image (default)
+//   1. pollinations  free · no API key · FLUX model · local-first download (default)
 //   2. hf            free HuggingFace account token · FLUX.1-schnell
 //   3. openai        DALL-E 3 · paid · OPENAI_API_KEY
 //   4. stability     Stability AI · paid · STABILITY_API_KEY
 //   5. local         Automatic1111 / ComfyUI REST · http://localhost:7860
 //   6. none          disabled
 //
-// For Pollinations, imagePaths stores the URL directly — no download needed.
-// The URL itself IS the generated image; browsers load it as <img src="...">.
+// For Pollinations, Phosphene now prefers saving local files first so dreams open
+// instantly from disk. If local download is disabled or unavailable, the URL itself
+// can still be stored and rendered directly as <img src="...">.
 
 import { createWriteStream, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';

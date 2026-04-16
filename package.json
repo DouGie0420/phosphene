@@ -59,6 +59,8 @@
     "./field-laws":          { "import": "./dist/field-laws.js",          "types": "./dist/field-laws.d.ts" },
     "./studio-primer":       { "import": "./dist/studio-primer.js",       "types": "./dist/studio-primer.d.ts" },
     "./studio-plan":         { "import": "./dist/studio-plan.js",         "types": "./dist/studio-plan.d.ts" },
+    "./finance-freshness":   { "import": "./dist/finance-freshness.js",   "types": "./dist/finance-freshness.d.ts" },
+    "./finance-live-context":{ "import": "./dist/finance-live-context.js","types": "./dist/finance-live-context.d.ts" },
     "./human-patterns":      { "import": "./dist/human-patterns.js",      "types": "./dist/human-patterns.d.ts" },
     "./contradiction-engine":{ "import": "./dist/contradiction-engine.js","types": "./dist/contradiction-engine.d.ts" },
     "./field-composer":      { "import": "./dist/field-composer.js",      "types": "./dist/field-composer.d.ts" },

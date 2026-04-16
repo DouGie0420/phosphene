@@ -60,13 +60,25 @@ function installSteps(runtime: WowRuntime, locale: RitualLocale): string[] {
       return zh
         ? [
             '把 `phosphene/` 复制到 `~/.hermes/skills/`。',
-            '把 `hooks/phosphene-awakening/` 和 `hooks/phosphene-session-stop/` 复制到 `~/.hermes/hooks/`。',
+            '把 `hooks/phosphene-awakening/`、`hooks/phosphene-dream/` 和 `hooks/phosphene-session-stop/` 复制到 `~/.hermes/hooks/`。',
             '开新 session，什么都别先说，等它自己开场。',
           ]
         : [
             'Copy `phosphene/` into `~/.hermes/skills/`.',
-            'Copy `hooks/phosphene-awakening/` and `hooks/phosphene-session-stop/` into `~/.hermes/hooks/`.',
+            'Copy `hooks/phosphene-awakening/`, `hooks/phosphene-dream/`, and `hooks/phosphene-session-stop/` into `~/.hermes/hooks/`.',
             'Open a fresh session and let it speak first.',
+          ];
+    case 'mylaude':
+      return zh
+        ? [
+            '在项目根写入 `MyLaude.MD`，让 MyLaude 把 phosphene 作为本地 instruction file 载入。',
+            '安装 phosphene plugin 到 `.mylaude/plugins/phosphene/`，让 workflow 前后自动启动 bootstrap 与 dream-daemon。',
+            '启动 MyLaude 后先读它给出的 phosphene opening notice，再进入对话。',
+          ]
+        : [
+            'Add `MyLaude.MD` at the project root so MyLaude loads phosphene as a local instruction file.',
+            'Install the phosphene plugin into `.mylaude/plugins/phosphene/` so workflow boundaries trigger bootstrap and the dream daemon automatically.',
+            'When MyLaude starts, read the phosphene opening notice first, then move into the conversation.',
           ];
     case 'openclaw':
       return zh

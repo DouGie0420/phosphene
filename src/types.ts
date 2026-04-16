@@ -338,6 +338,16 @@ export interface StudioExecutionPlan {
   arbitrationRule: string;
 }
 
+export interface FinanceFreshnessProtocol {
+  title: string;
+  referenceTimeIso: string;
+  timeBasis: string;
+  latestDataRule: string;
+  staleDataRule: string;
+  dataStatus: string;
+  sourceChecklist: string[];
+}
+
 export type TemperamentPrimitive =
   | 'obsessive_iteration'
   | 'pattern_hunger'
@@ -449,6 +459,7 @@ export interface SessionEnvelope {
   fieldLaws?: RitualFieldLaws;
   studioPrimer?: StudioPrimer;
   studioPlan?: StudioExecutionPlan;
+  financeFreshness?: FinanceFreshnessProtocol;
   contradictionRead?: ContradictionRead;
   fieldComposition?: RitualFieldComposition;
   fieldMasterwork?: RitualFieldMasterwork;
@@ -458,6 +469,7 @@ export interface SessionEnvelope {
 export type WowRuntime =
   | 'claude'
   | 'hermes'
+  | 'mylaude'
   | 'openclaw'
   | 'generic';
 
@@ -756,6 +768,10 @@ export interface DreamRecord {
   /** The last image before consciousness returns — always present. */
   wakingLine: string;
   seeds: DreamSeed[];
+  /** The active visual prompt strategy used to derive image prompts. */
+  visualProfile: string;
+  /** Monotonic revision for prompt construction / visual semantics. */
+  promptRevision: number;
   /**
    * Visual style string applied to all image prompts.
    * Derived from presetAtSleep and active perceptual layers.
@@ -765,6 +781,10 @@ export interface DreamRecord {
   hasImages: boolean;
   /** Paths to generated images, keyed by fragment order. */
   imagePaths: Record<number, string>;
+  /** The backend that most recently generated image assets for this dream. */
+  imageBackend: string | null;
+  /** The concrete image model last used for this dream, when known. */
+  imageModel: string | null;
 }
 
 /** Configuration for optional image generation. */
@@ -774,7 +794,7 @@ export interface DreamImageConfig {
    *
    * - 'pollinations' — free, zero config, no API key required (default).
    *                    Uses Pollinations.ai with the FLUX model.
-   *                    imagePaths stores the URL directly; no local download.
+   *                    Defaults to local-first download, but can fall back to URL attachment.
    * - 'hf'          — HuggingFace Inference API, free tier with account token.
    *                    Uses FLUX.1-schnell. Set apiKey = HF token.
    * - 'openai'      — DALL-E 3. Requires OPENAI_API_KEY.
@@ -795,7 +815,7 @@ export interface DreamImageConfig {
   height?: number;
   /**
    * When true, download remote image responses to imageOutputDir and store local paths.
-   * Particularly useful with the Pollinations backend when the user wants local assets.
+   * Pollinations now treats this as the default unless `--no-download` is used.
    */
   download?: boolean;
   /** Output directory for downloaded images. Defaults to dreams/images/. */

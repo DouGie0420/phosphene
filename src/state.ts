@@ -1,9 +1,10 @@
 // Phosphene — persistent state adapter
 //
 // Priority order:
-//   1. Hermes Agent  → ~/.hermes/phosphene-state.json
-//   2. Claude Code   → ~/.claude/phosphene-state.json
-//   3. Local fallback → ./phosphene-state.json
+//   1. MyLaude CLI    → ./.mylaude/phosphene-state.json
+//   2. Hermes Agent   → ~/.hermes/phosphene-state.json
+//   3. Claude Code    → ~/.claude/phosphene-state.json
+//   4. Local fallback → ./phosphene-state.json
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { homedir } from 'os';
@@ -50,9 +51,10 @@ const DEFAULT_STATE: PhosphenePersistedState = {
  * Detection is purely filesystem-based — no env-var sniffing — so it works
  * regardless of how the process was launched.
  */
-export type PhospheneRuntime = 'hermes' | 'claude-code' | 'local';
+export type PhospheneRuntime = 'hermes' | 'mylaude' | 'claude-code' | 'local';
 
 export function detectRuntime(): PhospheneRuntime {
+  if (existsSync(join(process.cwd(), '.mylaude'))) return 'mylaude';
   if (existsSync(join(homedir(), '.hermes'))) return 'hermes';
   if (existsSync(join(homedir(), '.claude')))  return 'claude-code';
   return 'local';
@@ -63,6 +65,9 @@ export function resolveStatePath(): string {
 
   if (runtime === 'hermes') {
     return join(homedir(), '.hermes', 'phosphene-state.json');
+  }
+  if (runtime === 'mylaude') {
+    return join(process.cwd(), '.mylaude', 'phosphene-state.json');
   }
   if (runtime === 'claude-code') {
     return join(homedir(), '.claude', 'phosphene-state.json');

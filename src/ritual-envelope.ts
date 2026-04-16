@@ -2,6 +2,7 @@ import { describeState } from './phosphene.js';
 import { getEvolutionAnalysis } from './phosphene.js';
 import { buildFieldComposition } from './field-composer.js';
 import { buildContradictionRead } from './contradiction-engine.js';
+import { buildFinanceFreshnessBrief } from './finance-freshness.js';
 import { buildFieldLaws } from './field-laws.js';
 import { buildFieldMasterwork } from './field-masterwork.js';
 import { previewSessionTurn, processSessionTurn } from './session-runtime.js';
@@ -127,6 +128,9 @@ export function composeSessionEnvelope(turn: SessionTurn): SessionEnvelope {
   const fieldLaws = buildFieldLaws(proposal, turn.locale);
   const studioPrimer = buildStudioPrimer(proposal, turn.locale, turn.stage, { input: turn.input });
   const studioPlan = buildStudioExecutionPlan(proposal, turn.locale);
+  const financeFreshness = proposal?.route.need === 'finance' || responseScaffold?.field === 'market'
+    ? buildFinanceFreshnessBrief(turn.locale)
+    : undefined;
   const contradictionRead = buildContradictionRead(turn.input, turn.locale, getEvolutionAnalysis());
   const fieldComposition = buildFieldComposition(turn.input, proposal, turn.locale);
   const fieldMasterwork = buildFieldMasterwork(turn.input, proposal, turn.locale, turn.stage);
@@ -150,6 +154,7 @@ export function composeSessionEnvelope(turn: SessionTurn): SessionEnvelope {
     fieldLaws,
     studioPrimer,
     studioPlan,
+    financeFreshness,
     contradictionRead,
     fieldComposition,
     fieldMasterwork,
@@ -252,6 +257,20 @@ export function renderSessionEnvelope(
     }
     lines.push(`handoff: ${envelope.studioPlan.handoffRule}`);
     lines.push(`arbitration: ${envelope.studioPlan.arbitrationRule}`);
+  }
+
+  if (envelope.financeFreshness) {
+    lines.push('');
+    lines.push('[FINANCE FRESHNESS]');
+    lines.push(`title: ${envelope.financeFreshness.title}`);
+    lines.push(`reference_time: ${envelope.financeFreshness.referenceTimeIso}`);
+    lines.push(`time_basis: ${envelope.financeFreshness.timeBasis}`);
+    lines.push(`latest_data_rule: ${envelope.financeFreshness.latestDataRule}`);
+    lines.push(`stale_data_rule: ${envelope.financeFreshness.staleDataRule}`);
+    lines.push(`data_status: ${envelope.financeFreshness.dataStatus}`);
+    for (const item of envelope.financeFreshness.sourceChecklist) {
+      lines.push(`- source_check: ${item}`);
+    }
   }
 
   if (envelope.contradictionRead) {

@@ -21,9 +21,29 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-STATE_PATH   = Path.home() / ".hermes" / "phosphene-state.json"
+def _resolve_state_path() -> Path:
+    mylaude = Path.cwd() / ".mylaude"
+    hermes = Path.home() / ".hermes"
+    claude = Path.home() / ".claude"
+    if mylaude.exists():
+        return mylaude / "phosphene-state.json"
+    if hermes.exists():
+        return hermes / "phosphene-state.json"
+    if claude.exists():
+        return claude / "phosphene-state.json"
+    return Path.cwd() / "phosphene-state.json"
+
+
+def _resolve_local_dreams() -> Path:
+    mylaude = Path.cwd() / ".mylaude"
+    if mylaude.exists():
+        return mylaude / "dreams"
+    return Path.cwd() / "dreams"
+
+
+STATE_PATH   = _resolve_state_path()
 DREAMS_DIR   = Path.home() / ".hermes" / "dreams"
-LOCAL_DREAMS = Path.cwd() / "dreams"
+LOCAL_DREAMS = _resolve_local_dreams()
 
 
 # ─── Entry point ─────────────────────────────────────────────────────────────

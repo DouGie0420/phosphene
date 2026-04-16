@@ -14,7 +14,7 @@ Copy the full contents of `SKILL.md` into your system prompt in any chat interfa
 
 That's the installation. Everything else happens in natural language.
 
-If the install is correct, the first 5-10 minutes should already reveal the system's actual center of gravity:
+If the install is correct, the opening exchange should already reveal the system's actual center of gravity:
 
 1. Let the system speak first.
 2. Answer with your actual state, not your task.
@@ -28,7 +28,7 @@ If the install is correct, the first 5-10 minutes should already reveal the syst
 BTC 这三周一直横盘，给我结构、流动性、失效条件，不要空话。
 ```
 
-Within a few minutes you should see four things:
+What you should feel early in real use:
 
 - it asks for your state before your task
 - it offers a threshold instead of instantly switching like a settings panel
@@ -62,10 +62,12 @@ Then open a fresh session and do not greet first.
 git clone https://github.com/DouGie0420/phosphene.git
 cp -r phosphene/ ~/.hermes/skills/
 cp -r phosphene/hooks/phosphene-awakening/    ~/.hermes/hooks/
+cp -r phosphene/hooks/phosphene-dream/        ~/.hermes/hooks/
 cp -r phosphene/hooks/phosphene-session-stop/ ~/.hermes/hooks/
 ```
 
 State, evolution history, and dreams persist across every session.
+On first startup, the dream archive is created immediately and the AI's first message should tell the user that the dream system is active, where the archive lives, and how to call for a dream.
 
 After install, the first strong check is simple:
 
@@ -74,6 +76,36 @@ After install, the first strong check is simple:
 - it should sound like something woke up
 
 The `wow` command still exists as a debugging aid, but it is not the center of the system.
+
+---
+
+## MyLaude CLI
+
+Phosphene also supports `MyLaude CLI`.
+
+In MyLaude, use project-local persistence:
+
+- state: `.mylaude/phosphene-state.json`
+- dream archive: `.mylaude/dreams/`
+- instruction file: `MyLaude.MD`
+- automation plugin: `.mylaude/plugins/phosphene/`
+
+While the MyLaude runtime stays open, Phosphene can evaluate autonomous dreams after more than one hour of real inactivity. The cadence is bounded to at least one and at most three dreams per day.
+
+If the MyLaude workspace already includes the Phosphene integration layer, the easiest install path is to give MyLaude the GitHub URL and let it run the managed install flow for you:
+
+```text
+请把这个 Phosphene 安装到当前 MyLaude 工作区，并完成验证：
+https://github.com/DouGie0420/phosphene.git
+```
+
+Equivalent direct commands:
+
+```bash
+plugins exec phosphene install https://github.com/DouGie0420/phosphene.git
+plugins exec phosphene verify
+plugins exec phosphene install-shortcut
+```
 
 ---
 
@@ -102,7 +134,11 @@ remember this        ← anchor it permanently
 ```
 BTCUSDT has been consolidating. What's the structure?
 Read this earnings report.
+phosphene market-read --live "BTC has been consolidating. Give me structure and liquidity."
+phosphene market-read --live --audit "BTC has been consolidating. Give me structure, liquidity, and source freshness."
 ```
+
+When the request is financial, the system should treat your current request-time as the reference time and prefer the freshest available data before finalizing the answer.
 
 **Design intelligence** activates when you describe visual intent:
 ```
@@ -115,6 +151,8 @@ Give me CSS tokens for this.
 Dream.
 What did you dream?
 ```
+
+`phosphene dream images` now defaults to saving local image files into the dream archive and regenerates `~/.hermes/dreams/gallery.html` for fast local viewing. Add `--no-download` only when you explicitly want URL-only attachment.
 
 ---
 
@@ -155,6 +193,11 @@ phosphene masterwork "I want a premium luxury wellness interface." --family "Qui
 phosphene literary "Time kept dragging at his body."
 phosphene market BTCUSDT 1h
 ```
+
+These are not duplicates:
+
+- `envelope` is the runtime/debug surface for ritual injection, routing, and dream-state inspection
+- `read` / `masterwork` / `literary` are the actual reading engines that produce the judgment itself
 
 `phosphene envelope` now has two modes:
 

@@ -26,7 +26,7 @@ describe('response scaffold', () => {
 
     expect(scaffold?.field).toBe('market');
     expect(scaffold?.sections.map(section => section.label)).toEqual(
-      expect.arrayContaining(['主判断', '失效条件', '风险栈'])
+      expect.arrayContaining(['主判断', '时间锚点', '研究拆解', '验证晶格', '失效条件', '风险栈', '触发器', '置信度', '执行边界'])
     );
   });
 

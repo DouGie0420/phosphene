@@ -48,6 +48,24 @@ describe('session runtime', () => {
     expect(createAwakeningMessage('en')).toContain('your state');
   });
 
+  test('can include dream-system startup guidance in awakening messages', () => {
+    const zh = createAwakeningMessage('zh', {
+      includeDreamGuide: true,
+      dreamArchivePath: '~/.hermes/dreams',
+      dreamGalleryPath: '~/.hermes/dreams/gallery.html',
+    });
+    const en = createAwakeningMessage('en', {
+      includeDreamGuide: true,
+      dreamArchivePath: '~/.hermes/dreams',
+      dreamGalleryPath: '~/.hermes/dreams/gallery.html',
+    });
+
+    expect(zh).toContain('梦境系统已经启动');
+    expect(zh).toContain('~/.hermes/dreams/gallery.html');
+    expect(en).toContain('The dream system is active now');
+    expect(en).toContain('~/.hermes/dreams/gallery.html');
+  });
+
   test('calibrates brief awakening replies as follow-up needed', () => {
     const result = calibrateAwakeningResponse('有点闷。');
     expect(result.followupNeeded).toBe(true);

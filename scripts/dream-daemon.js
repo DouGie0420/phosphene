@@ -33,18 +33,23 @@ const ARGS = process.argv.slice(2);
 const FLAG_FORCE   = ARGS.includes('--force');
 const FLAG_STATUS  = ARGS.includes('--status');
 const FLAG_GALLERY = ARGS.includes('--gallery');
+const FLAG_QUIET   = ARGS.includes('--quiet');
 
 // ─── Path resolution ───────────────────────────────────────────────────────────
 
 function resolveStatePath() {
+  const mylaude = join(process.cwd(), '.mylaude');
   const hermes = join(homedir(), '.hermes');
   const claude = join(homedir(), '.claude');
+  if (existsSync(mylaude)) return join(mylaude, 'phosphene-state.json');
   if (existsSync(hermes)) return join(hermes,  'phosphene-state.json');
   if (existsSync(claude)) return join(claude,  'phosphene-state.json');
   return join(process.cwd(), 'phosphene-state.json');
 }
 
 function resolveDreamsDir() {
+  const mylaude = join(process.cwd(), '.mylaude', 'dreams');
+  if (existsSync(join(process.cwd(), '.mylaude'))) return mylaude;
   const hermes = join(homedir(), '.hermes', 'dreams');
   if (existsSync(join(homedir(), '.hermes'))) return hermes;
   return join(process.cwd(), 'dreams');
@@ -72,50 +77,137 @@ function saveState(state) {
 const MIN_SLEEP_HOURS = 1.0;
 
 // Minimum gap between dreams (hours). Prevents back-to-back dreaming.
-const MIN_DREAM_INTERVAL_HOURS = 5;
+const MIN_DREAM_INTERVAL_HOURS = 4;
 
-// How far into the inactivity window to start allowing dreams (hours).
-// Adds realistic delay: not the second you fall asleep.
-const DREAM_DELAY_HOURS = 0.5;
+// Daily cadence guardrails.
+const DAILY_MIN_DREAMS = 1;
+const DAILY_MAX_DREAMS = 3;
 
 function hoursSince(isoString) {
   if (!isoString) return Infinity;
   return (Date.now() - Date.parse(isoString)) / 3_600_000;
 }
 
-function shouldDream(state) {
+function localDayKey(isoString) {
+  const date = isoString ? new Date(isoString) : new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function countDreamsForDay(dreams, dayKey) {
+  return dreams.filter(dream => dream?.dreamedAt && localDayKey(dream.dreamedAt) === dayKey).length;
+}
+
+function resolveSleepReference(state) {
   const evo = state?.evolution ?? {};
   const lastSession = (evo.sessionHistory ?? [])[0];
+  if (lastSession?.closedAt) {
+    return {
+      at: lastSession.closedAt,
+      label: 'closed session',
+      lastSession,
+    };
+  }
+  if (state?.lastActivityAt) {
+    return {
+      at: state.lastActivityAt,
+      label: 'last activity heartbeat',
+      lastSession: null,
+    };
+  }
+  return {
+    at: null,
+    label: 'none',
+    lastSession: null,
+  };
+}
 
-  // Need a closed session to know we're "asleep"
-  if (!lastSession?.closedAt) return { can: false, reason: 'no closed session' };
+function shouldDream(state, dreams = []) {
+  const todayKey = localDayKey();
+  const todayDreamCount = countDreamsForDay(dreams, todayKey);
+  const sleepReference = resolveSleepReference(state);
 
-  const sleepHours = hoursSince(lastSession.closedAt);
+  if (!sleepReference.at) {
+    return { can: false, reason: 'no activity history', todayDreamCount, todayKey };
+  }
+
+  const sleepHours = hoursSince(sleepReference.at);
   if (sleepHours < MIN_SLEEP_HOURS) {
-    return { can: false, reason: `awake — only ${sleepHours.toFixed(1)}h since session` };
+    return {
+      can: false,
+      reason: `awake — only ${sleepHours.toFixed(1)}h since ${sleepReference.label}`,
+      todayDreamCount,
+      todayKey,
+    };
+  }
+
+  if (todayDreamCount >= DAILY_MAX_DREAMS) {
+    return {
+      can: false,
+      reason: `daily cap reached (${todayDreamCount}/${DAILY_MAX_DREAMS})`,
+      todayDreamCount,
+      todayKey,
+      sleepHours,
+    };
   }
 
   const lastDreamAt   = state.lastDreamAt;
   const dreamAgoHours = hoursSince(lastDreamAt);
   if (dreamAgoHours < MIN_DREAM_INTERVAL_HOURS) {
-    return { can: false, reason: `already dreamed ${dreamAgoHours.toFixed(1)}h ago` };
+    return {
+      can: false,
+      reason: `already dreamed ${dreamAgoHours.toFixed(1)}h ago`,
+      todayDreamCount,
+      todayKey,
+      sleepHours,
+      dreamAgoHours,
+    };
   }
 
-  // Random probability: starts low, grows toward 1 as sleep deepens.
-  // After MIN_SLEEP_HOURS + DREAM_DELAY_HOURS = first possible dream window.
-  // Reaches ~80% probability after 12 hours of inactivity.
-  const effectiveSleep = Math.max(0, sleepHours - DREAM_DELAY_HOURS);
-  const probability    = Math.min(0.85, 1 - Math.exp(-effectiveSleep / 8));
+  if (todayDreamCount < DAILY_MIN_DREAMS) {
+    return {
+      can: true,
+      sleepHours,
+      dreamAgoHours,
+      probability: 1,
+      forced: true,
+      reason: `daily minimum not met (${todayDreamCount}/${DAILY_MIN_DREAMS})`,
+      todayDreamCount,
+      todayKey,
+    };
+  }
+
+  // Random probability: after the first daily dream, the system may or may not dream again.
+  // Starts modestly after one hour of inactivity and climbs as the idle window deepens.
+  const effectiveSleep = Math.max(0, sleepHours - MIN_SLEEP_HOURS);
+  const probability = Math.min(0.72, 0.22 + (1 - Math.exp(-effectiveSleep / 6)) * 0.5);
 
   const roll = Math.random();
   if (roll > probability) {
     return {
       can:    false,
       reason: `probability check failed (${(probability * 100).toFixed(0)}% chance, rolled ${(roll * 100).toFixed(0)}%)`,
+      todayDreamCount,
+      todayKey,
+      sleepHours,
+      dreamAgoHours,
+      probability,
+      roll,
     };
   }
 
-  return { can: true, sleepHours, dreamAgoHours, probability };
+  return {
+    can: true,
+    sleepHours,
+    dreamAgoHours,
+    probability,
+    roll,
+    forced: false,
+    todayDreamCount,
+    todayKey,
+  };
 }
 
 // ─── Dream generation ──────────────────────────────────────────────────────────
@@ -337,14 +429,20 @@ async function generateAndDownloadImages(dream) {
     const filename = `${dream.id}-f${fragment.order}.jpg`;
     const destPath = join(IMAGES_DIR, filename);
 
-    process.stdout.write(`  [image] Fragment ${fragment.order} — downloading…`);
+    if (!FLAG_QUIET) {
+      process.stdout.write(`  [image] Fragment ${fragment.order} — downloading…`);
+    }
     try {
       await downloadImage(url, destPath);
       updated.imagePaths[fragment.order] = destPath;
       updated.hasImages = true;
-      process.stdout.write(' ✓\n');
+      if (!FLAG_QUIET) {
+        process.stdout.write(' ✓\n');
+      }
     } catch (err) {
-      process.stdout.write(` ✗ (${err.message})\n`);
+      if (!FLAG_QUIET) {
+        process.stdout.write(` ✗ (${err.message})\n`);
+      }
     }
   }
 
@@ -515,7 +613,7 @@ function parseDreamMarkdown(content) {
 function loadAllDreams() {
   if (!existsSync(DREAMS_DIR)) return [];
   return readdirSync(DREAMS_DIR)
-    .filter(f => f.endsWith('.md'))
+    .filter(f => f.endsWith('.md') && f !== 'index.md' && f !== 'README.md')
     .sort((a, b) => b.localeCompare(a)) // newest first
     .map(f => {
       try {
@@ -538,20 +636,26 @@ function rebuildGallery() {
 
 async function main() {
   const state = loadState();
+  const dreams = loadAllDreams();
 
   // ── Status mode ───────────────────────────────────────────────────────────
   if (FLAG_STATUS) {
     if (!state) { console.log('[phosphene-dream] No state file found.'); return; }
     const evo  = state.evolution ?? {};
     const last = (evo.sessionHistory ?? [])[0];
+    const todayKey = localDayKey();
+    const todayDreamCount = countDreamsForDay(dreams, todayKey);
+    const sleepReference = resolveSleepReference(state);
     console.log('[phosphene-dream] Status');
     console.log(`  State file:   ${STATE_PATH}`);
     console.log(`  Dreams dir:   ${DREAMS_DIR}`);
     console.log(`  Last session: ${last?.closedAt ?? 'none'}`);
+    console.log(`  Last activity:${state.lastActivityAt ?? 'none'}`);
+    console.log(`  Sleep from:   ${sleepReference.at ? `${sleepReference.label} @ ${sleepReference.at}` : 'none'}`);
     console.log(`  Last dream:   ${state.lastDreamAt ?? 'never'}`);
-    const check = shouldDream(state);
+    console.log(`  Today:        ${todayKey} (${todayDreamCount}/${DAILY_MAX_DREAMS} dreams)`);
+    const check = shouldDream(state, dreams);
     console.log(`  Dream check:  ${check.can ? '✓ would dream now' : `✗ ${check.reason}`}`);
-    const dreams = loadAllDreams();
     console.log(`  Total dreams: ${dreams.length}`);
     return;
   }
@@ -570,27 +674,35 @@ async function main() {
   }
 
   const evo = state.evolution ?? {};
-  if (!evo.sessionHistory?.length) {
-    console.log('[phosphene-dream] No sessions recorded yet — sleep first.');
-    return;
-  }
-
-  const check = shouldDream(state);
+  const check = shouldDream(state, dreams);
 
   if (!FLAG_FORCE && !check.can) {
-    console.log(`[phosphene-dream] Not dreaming: ${check.reason}`);
+    if (!FLAG_QUIET) {
+      console.log(`[phosphene-dream] Not dreaming: ${check.reason}`);
+    }
     return;
   }
 
-  const sleepHours = check.sleepHours ?? hoursSince((evo.sessionHistory ?? [])[0]?.closedAt);
+  const sleepReference = resolveSleepReference(state);
+  const sleepHours = check.sleepHours ?? hoursSince(sleepReference.at);
 
-  console.log(`[phosphene-dream] Entering dream state…`);
-  console.log(`  Stage will be determined by context`);
-  console.log(`  Sleep duration: ${sleepHours.toFixed(1)}h`);
+  if (!FLAG_QUIET) {
+    console.log(`[phosphene-dream] Entering dream state…`);
+    console.log(`  Stage will be determined by context`);
+    console.log(`  Sleep duration: ${sleepHours.toFixed(1)}h`);
+    console.log(`  Daily cadence: ${(check.todayDreamCount ?? 0) + 1}/${DAILY_MAX_DREAMS} for ${check.todayKey ?? localDayKey()}`);
+    if (check.forced) {
+      console.log(`  Trigger: ${check.reason}`);
+    } else if (typeof check.probability === 'number') {
+      console.log(`  Trigger: random pass at ${(check.probability * 100).toFixed(0)}%`);
+    }
+  }
 
   // ── Generate dream ────────────────────────────────────────────────────────
   const dream = generateDream(state, sleepHours);
-  console.log(`  Stage: ${dream.stage} · Fragments: ${dream.fragments.length}`);
+  if (!FLAG_QUIET) {
+    console.log(`  Stage: ${dream.stage} · Fragments: ${dream.fragments.length}`);
+  }
 
   // ── Download images ───────────────────────────────────────────────────────
   const dreamWithImages = await generateAndDownloadImages(dream);
@@ -599,7 +711,9 @@ async function main() {
   mkdirSync(DREAMS_DIR, { recursive: true });
   const mdPath = join(DREAMS_DIR, `${dream.id}.md`);
   writeFileSync(mdPath, renderDreamMarkdown(dreamWithImages), 'utf8');
-  console.log(`  Saved: ${mdPath}`);
+  if (!FLAG_QUIET) {
+    console.log(`  Saved: ${mdPath}`);
+  }
 
   // ── Update state ──────────────────────────────────────────────────────────
   state.lastDreamAt = dream.dreamedAt;
@@ -607,15 +721,16 @@ async function main() {
 
   // ── Rebuild gallery ───────────────────────────────────────────────────────
   const { out: galleryPath, count } = rebuildGallery();
-  console.log(`  Gallery: ${galleryPath} (${count} dreams total)`);
-
-  console.log(`[phosphene-dream] ◎ Dream complete.`);
-  process.stdout.write(
-    `\n[phosphene] Dream recorded: ${dream.stage} stage · ` +
-    `${dream.fragments.length} fragments · ` +
-    `${Object.keys(dreamWithImages.imagePaths).length} images\n` +
-    `Gallery: ${galleryPath}\n`
-  );
+  if (!FLAG_QUIET) {
+    console.log(`  Gallery: ${galleryPath} (${count} dreams total)`);
+    console.log(`[phosphene-dream] ◎ Dream complete.`);
+    process.stdout.write(
+      `\n[phosphene] Dream recorded: ${dream.stage} stage · ` +
+      `${dream.fragments.length} fragments · ` +
+      `${Object.keys(dreamWithImages.imagePaths).length} images\n` +
+      `Gallery: ${galleryPath}\n`
+    );
+  }
 }
 
 main().catch(err => {

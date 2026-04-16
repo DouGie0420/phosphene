@@ -98,6 +98,7 @@ export type {
   StudioRoleSpec,
   StudioPlanStep,
   StudioExecutionPlan,
+  FinanceFreshnessProtocol,
   TemperamentPrimitive,
   BehavioralPattern,
   EvolutionaryBias,
@@ -111,6 +112,23 @@ export { buildFieldFamily } from './field-family.js';
 export { buildFieldLaws } from './field-laws.js';
 export { buildStudioPrimer } from './studio-primer.js';
 export { buildStudioExecutionPlan } from './studio-plan.js';
+export { buildFinanceFreshnessBrief } from './finance-freshness.js';
+export type {
+  FinancialHeadline,
+  FinancialLiveSpot,
+  FinancialLiveDerivatives,
+  FinancialLiveContext,
+} from './finance-live-context.js';
+export {
+  inferMarketSymbol,
+  parseGoogleNewsRss,
+  fetchLiveSpot,
+  fetchLiveDerivatives,
+  fetchGoogleNewsHeadlines,
+  fetchFinancialLiveContext,
+  renderFinancialLiveContext,
+  renderFinancialLiveAudit,
+} from './finance-live-context.js';
 export {
   TEMPERAMENT_PRIMITIVES,
   BEHAVIORAL_PATTERNS,
@@ -259,6 +277,8 @@ export type {
 
 export {
   resolveDreamsDir,
+  isManagedDreamFile,
+  dreamNeedsVisualRefresh,
   generateDream,
   renderDream,
   saveDream,
@@ -267,9 +287,13 @@ export {
   loadDreams,
   loadLatestDream,
   generateDreamImages,
+  refreshDreamVisuals,
   attachPollinationsUrls,
+  renderDreamGallery,
+  saveDreamGallery,
   describeDream,
 } from './dreams.js';
+export { parseDreamMarkdownForViz } from './dream-viz-parser.js';
 
 export type { GeneratedImage } from './image-gen.js';
 export {

@@ -24,6 +24,8 @@ describe('studio primer', () => {
 
     expect(primer?.cadence).toContain('judgment');
     expect(primer?.antiSlop.length).toBeGreaterThan(0);
+    expect(primer?.payload).toContain('reference time first');
+    expect(primer?.antiSlop).toContain('stale material');
   });
 
   test('carries contradiction guidance into the primer when input warrants it', () => {

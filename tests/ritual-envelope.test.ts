@@ -130,6 +130,20 @@ describe('ritual envelope', () => {
     expect(rendered).not.toContain('[FIELD COMPOSITION DRAFT]');
   });
 
+  test('renders finance freshness rules for market-facing envelopes', () => {
+    const envelope = buildSessionEnvelope(
+      'BTC has been consolidating. Give me structure, invalidation, and liquidity.',
+      { persist: false, stateOverride: mockState() }
+    );
+    const rendered = renderSessionEnvelope(envelope);
+
+    expect(envelope.financeFreshness).toBeDefined();
+    expect(rendered).toContain('[FINANCE FRESHNESS]');
+    expect(rendered).toContain('reference_time:');
+    expect(rendered).toContain('latest_data_rule:');
+    expect(rendered).toContain('source_check:');
+  });
+
   test('renders full diagnostic blocks when full mode is requested', () => {
     const envelope = buildSessionEnvelope(
       'This landing page has coherent hierarchy and palette, but the work is cleaner than my life chaos, and I keep calling that damage depth.',

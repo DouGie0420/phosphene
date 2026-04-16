@@ -297,7 +297,7 @@
       <span id="gallery-title">Dream Files</span>
       <label id="gallery-load-btn" for="dream-file-input">Load dreams folder</label>
       <input type="file" id="dream-file-input" accept=".md" multiple style="display:none">
-      <span id="gallery-note">drag &amp; drop dream .md files · or open dreams/gallery.html for full view</span>
+      <span id="gallery-note">drag &amp; drop dream .md files with local images, or let this page render remote image URLs directly</span>
     </div>
     <div id="gallery-drop-zone">Drop dream markdown files here (from your dreams/ folder)</div>
     <div id="gallery-images" style="display:none"></div>
@@ -700,16 +700,21 @@ function parseFrontmatter(text) {
   const imgMatches = [...fm.matchAll(/^\s+(\d+):\s+"(.+)"$/gm)];
   const imagePaths = {};
   for (const [, k, v] of imgMatches) imagePaths[Number(k)] = v;
-  const fragBlocks = [...text.slice(m[0].length).matchAll(/## Fragment \d+ — (\w+)\n+([\s\S]*?)(?=\n## Fragment|\n---|\s*$)/g)];
+  const fragmentSection = text.match(/## Fragments\s+([\s\S]*?)\n---/);
+  const fragBlocks = fragmentSection
+    ? [...fragmentSection[1].matchAll(/### Fragment\s+(\d+)\s+\*\(([^)]+)\)\*\s+([\s\S]*?)(?=\n### Fragment|\n---|$)/g)]
+    : [];
   const fragments = fragBlocks.map((fm2, i) => ({
-    order: i, logic: fm2[1],
-    text: fm2[2].trim().split('\n\n')[0].trim().slice(0, 200),
+    order: Number(fm2[1]),
+    logic: fm2[2],
+    text: fm2[3].trim().split('\n> **Image prompt:**')[0].trim().slice(0, 200),
   }));
+  const wakingLine = (text.match(/## Waking Line\s+\*([\s\S]*?)\*/)?.[1] ?? '').trim();
   return {
     stage: get('stage') || 'rem',
-    preset: get('preset') || 'deep-flux',
-    dreamedAt: get('dreamedAt'),
-    wakingLine: get('wakingLine'),
+    preset: get('preset_at_sleep') || get('preset') || 'deep-flux',
+    dreamedAt: get('dreamed_at') || get('dreamedAt'),
+    wakingLine,
     imagePaths,
     fragments,
   };
@@ -724,7 +729,12 @@ function renderDreamCard(dream, imageFiles) {
   const firstName    = firstImgPath.split(/[\\/]/).pop();
   const imageFile    = imageFiles.find(f => f.name === firstName);
 
-  if (imageFile) {
+  if (/^https?:\/\//i.test(firstImgPath)) {
+    const img = document.createElement('img');
+    img.src = firstImgPath;
+    img.alt = dream.stage;
+    card.appendChild(img);
+  } else if (imageFile) {
     const blobUrl = URL.createObjectURL(imageFile);
     const img = document.createElement('img');
     img.src = blobUrl;

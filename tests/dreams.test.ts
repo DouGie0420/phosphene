@@ -2,18 +2,25 @@
 
 import { tmpdir } from 'os';
 import { join }   from 'path';
-import { rmSync, existsSync, readFileSync } from 'fs';
+import { rmSync, existsSync, readFileSync, mkdirSync, writeFileSync } from 'fs';
 import {
   generateDream,
   renderDream,
   saveDream,
+  saveDreamSnapshot,
   loadDreamFile,
   readDreamMarkdown,
   loadDreams,
   loadLatestDream,
   attachPollinationsUrls,
+  generateDreamImages,
+  refreshDreamVisuals,
+  renderDreamGallery,
+  saveDreamGallery,
   describeDream,
   resolveDreamsDir,
+  isManagedDreamFile,
+  dreamNeedsVisualRefresh,
 } from '../src/dreams.js';
 import { DEFAULT_EVOLUTION } from '../src/evolution.js';
 import { PRESETS } from '../src/presets.js';
@@ -82,8 +89,12 @@ describe('generateDream', () => {
     expect(dream.seeds).toBeDefined();
     expect(Array.isArray(dream.seeds)).toBe(true);
     expect(dream.imageStyle).toBeTruthy();
+    expect(dream.visualProfile).toBeTruthy();
+    expect(dream.promptRevision).toBeGreaterThan(0);
     expect(dream.hasImages).toBe(false);
     expect(typeof dream.imagePaths).toBe('object');
+    expect(dream.imageBackend).toBeNull();
+    expect(dream.imageModel).toBeNull();
   });
 
   test('intensity is clamped between 0 and 1', () => {
@@ -118,6 +129,16 @@ describe('generateDream', () => {
     for (const fragment of dream.fragments) {
       // Style for dissolution includes "Francis Bacon"
       expect(fragment.imagePrompt).toContain('Francis Bacon');
+    }
+  });
+
+  test('thin-material dreams add anti-portrait guardrails to image prompts', () => {
+    const dream = generateDream(freshEvolution(), makeContext('clear'));
+
+    for (const fragment of dream.fragments) {
+      expect(fragment.imagePrompt).toContain('no human portrait');
+      expect(fragment.imagePrompt).toContain('no centered woman');
+      expect(fragment.imagePrompt).toContain('empty room in pale morning light');
     }
   });
 
@@ -219,6 +240,10 @@ describe('renderDream', () => {
 
   test('frontmatter contains required fields', () => {
     const rendered = renderDream(dream);
+    expect(rendered).toContain('origin: phosphene-dream');
+    expect(rendered).toContain('schema_version: 2');
+    expect(rendered).toContain(`visual_profile: ${dream.visualProfile}`);
+    expect(rendered).toContain(`prompt_revision: ${dream.promptRevision}`);
     expect(rendered).toContain(`id: ${dream.id}`);
     expect(rendered).toContain(`stage: ${dream.stage}`);
     expect(rendered).toContain(`preset_at_sleep: ${dream.presetAtSleep}`);
@@ -375,6 +400,48 @@ describe('dream persistence', () => {
     expect(markdown).toContain('## Generated Images');
   });
 
+  test('saveDream writes a local gallery for instant archive viewing', () => {
+    const dream = {
+      ...generateDream(enrichedEvolution(), makeContext()),
+      hasImages: true,
+      imagePaths: {
+        1: join(tmpDir, 'images', 'dream-local.jpg'),
+      },
+    };
+
+    saveDream(dream, tmpDir);
+
+    const galleryPath = join(tmpDir, 'gallery.html');
+    expect(existsSync(galleryPath)).toBe(true);
+
+    const gallery = readFileSync(galleryPath, 'utf-8');
+    expect(gallery).toContain('Dream Archive');
+    expect(gallery).toContain('images/dream-local.jpg');
+    expect(gallery).toContain('.md');
+  });
+
+  test('saveDreamSnapshot treats markdown as the canonical persisted dream', () => {
+    const dream = generateDream(enrichedEvolution(), makeContext('dissolution'));
+    const snapshot = saveDreamSnapshot(dream, tmpDir);
+
+    expect(snapshot.filepath).toContain('.md');
+    expect(snapshot.dream.id).toBe(dream.id);
+    expect(snapshot.dream.stage).toBe(dream.stage);
+    expect(snapshot.dream.fragments[0]!.imagePrompt).toBe(dream.fragments[0]!.imagePrompt);
+    expect(snapshot.dream.visualProfile).toBe(dream.visualProfile);
+    expect(snapshot.dream.promptRevision).toBe(dream.promptRevision);
+  });
+
+  test('re-saving the same dream does not duplicate archive index entries', () => {
+    const dream = generateDream(enrichedEvolution(), makeContext());
+    saveDream(dream, tmpDir);
+    saveDream({ ...dream, hasImages: true, imagePaths: { 1: 'https://image.pollinations.ai/example' } }, tmpDir);
+
+    const index = readFileSync(join(tmpDir, 'index.md'), 'utf-8');
+    const filename = `${new Date(dream.dreamedAt).toISOString().slice(0, 16).replace('T', '-').replace(':', '')}-${dream.stage}.md`;
+    expect(index.match(new RegExp(filename.replace('.', '\\.'), 'g'))).toHaveLength(1);
+  });
+
   test('loadDreams returns empty array for non-existent directory', () => {
     const dreams = loadDreams(join(tmpDir, 'nonexistent'));
     expect(dreams).toEqual([]);
@@ -432,6 +499,32 @@ describe('resolveDreamsDir', () => {
   });
 });
 
+describe('isManagedDreamFile', () => {
+  test('accepts markdown inside the dream archive and rejects outside files', () => {
+    const archiveDir = join(tmpdir(), `phosphene-test-managed-dream-${Date.now()}`);
+    const inside = join(archiveDir, '2026-04-16-rem.md');
+    const outside = join(tmpdir(), 'not-a-dream.md');
+
+    expect(isManagedDreamFile(inside, archiveDir)).toBe(true);
+    expect(isManagedDreamFile(outside, archiveDir)).toBe(false);
+  });
+
+  test('rejects unsigned markdown that is merely placed inside the archive', () => {
+    const archiveDir = join(tmpdir(), `phosphene-test-managed-signature-${Date.now()}`);
+    const unsigned = join(archiveDir, 'fake.md');
+    const signedDream = generateDream(enrichedEvolution(), makeContext());
+    const signedPath = saveDream(signedDream, archiveDir);
+
+    expect(existsSync(signedPath)).toBe(true);
+
+    rmSync(archiveDir, { recursive: true, force: true });
+    mkdirSync(archiveDir, { recursive: true });
+    writeFileSync(unsigned, '# fake\n\nnot a phosphene dream', 'utf-8');
+
+    expect(isManagedDreamFile(unsigned, archiveDir)).toBe(false);
+  });
+});
+
 describe('attachPollinationsUrls', () => {
   test('adds image URLs for every fragment', () => {
     const dream = generateDream(enrichedEvolution(), makeContext());
@@ -440,5 +533,111 @@ describe('attachPollinationsUrls', () => {
     expect(withUrls.hasImages).toBe(true);
     expect(Object.keys(withUrls.imagePaths).length).toBe(dream.fragments.length);
     expect(Object.values(withUrls.imagePaths)[0]).toContain('https://image.pollinations.ai/prompt/');
+    expect(withUrls.imageBackend).toBe('pollinations');
+    expect(withUrls.imageModel).toBe('flux');
+  });
+
+  test('uses dream-specific seeds so separate dreams do not reuse the same URL', () => {
+    const first = attachPollinationsUrls(generateDream(freshEvolution(), makeContext('clear')));
+    const second = attachPollinationsUrls(generateDream(freshEvolution(), makeContext('clear')));
+
+    expect(first.imagePaths[1]).toContain('seed=');
+    expect(second.imagePaths[1]).toContain('seed=');
+    expect(first.imagePaths[1]).not.toBe(second.imagePaths[1]);
+  });
+});
+
+describe('generateDreamImages', () => {
+  test('can attach pollinations URLs without downloading files', async () => {
+    const dream = generateDream(enrichedEvolution(), makeContext());
+    const tempDreamDir = join(tmpdir(), `phosphene-test-dream-image-urls-${Date.now()}`);
+    const updated = await generateDreamImages(dream, {
+      provider: 'pollinations',
+      download: false,
+    }, tempDreamDir);
+
+    expect(updated.hasImages).toBe(true);
+    expect(Object.keys(updated.imagePaths).length).toBe(dream.fragments.length);
+    expect(Object.values(updated.imagePaths)[0]).toContain('https://image.pollinations.ai/prompt/');
+  });
+});
+
+describe('refreshDreamVisuals', () => {
+  test('rebuilds stale image prompts with current visual anchors and clears stale assets', () => {
+    const original = generateDream(freshEvolution(), makeContext('clear'));
+    const stale = {
+      ...original,
+      hasImages: true,
+      imagePaths: { 1: 'https://image.pollinations.ai/prompt/old' },
+      fragments: original.fragments.map(fragment => ({
+        ...fragment,
+        imagePrompt: 'The concept translated itself through three senses before it arrived as language, cinematic composition, high detail in subject, --ar 16:9',
+        seedIds: [],
+      })),
+    };
+
+    const refreshed = refreshDreamVisuals(stale);
+
+    expect(refreshed.hasImages).toBe(false);
+    expect(refreshed.imagePaths).toEqual({});
+    expect(refreshed.visualProfile).not.toBe('legacy');
+    expect(refreshed.promptRevision).toBeGreaterThan(1);
+    expect(refreshed.fragments[0]!.imagePrompt).toContain('empty room in pale morning light');
+    expect(refreshed.fragments[0]!.imagePrompt).toContain('no human portrait');
+  });
+});
+
+describe('dreamNeedsVisualRefresh', () => {
+  test('flags legacy dream metadata as stale', () => {
+    const dream = generateDream(enrichedEvolution(), makeContext());
+    const legacy = { ...dream, visualProfile: 'legacy', promptRevision: 1 };
+
+    expect(dreamNeedsVisualRefresh(legacy)).toBe(true);
+    expect(dreamNeedsVisualRefresh(dream)).toBe(false);
+  });
+});
+
+describe('dream gallery rendering', () => {
+  test('renderDreamGallery keeps remote and local assets visible', () => {
+    const tempDreamDir = join(tmpdir(), `phosphene-test-dream-gallery-${Date.now()}`);
+    const dream = {
+      ...generateDream(enrichedEvolution(), makeContext()),
+      hasImages: true,
+      imagePaths: {
+        1: join(tempDreamDir, 'images', 'fragment-1.jpg'),
+        2: 'https://image.pollinations.ai/prompt/example',
+      },
+    };
+
+    const html = renderDreamGallery([dream], tempDreamDir);
+
+    expect(html).toContain('fragment-1.jpg');
+    expect(html).toContain('https://image.pollinations.ai/prompt/example');
+    expect(html).toContain('Open markdown');
+    expect(html).toContain(dream.visualProfile);
+  });
+
+  test('saveDreamGallery returns the generated local gallery path', () => {
+    const tempDreamDir = join(tmpdir(), `phosphene-test-dream-gallery-save-${Date.now()}`);
+    saveDream(generateDream(enrichedEvolution(), makeContext()), tempDreamDir);
+    const galleryPath = saveDreamGallery(tempDreamDir);
+
+    expect(galleryPath).toBe(join(tempDreamDir, 'gallery.html'));
+    expect(existsSync(galleryPath)).toBe(true);
+  });
+
+  test('renderDreamGallery marks stale dreams in the archive view', () => {
+    const tempDreamDir = join(tmpdir(), `phosphene-test-dream-gallery-stale-${Date.now()}`);
+    const dream = {
+      ...generateDream(enrichedEvolution(), makeContext()),
+      visualProfile: 'legacy',
+      promptRevision: 1,
+    };
+
+    const html = renderDreamGallery([dream], tempDreamDir);
+
+    expect(html).toContain('dream-stale');
+    expect(html).toContain('stale');
+    expect(html).toContain('legacy');
   });
 });

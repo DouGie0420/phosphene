@@ -68,13 +68,33 @@ export interface MarketSnapshot {
 
 function httpsGet(url: string): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, { timeout: 10_000 }, (res) => {
+    const req = https.get(url, {
+      timeout: 10_000,
+      headers: {
+        'User-Agent': 'phosphene/1.0',
+      },
+    }, (res) => {
       const chunks: Buffer[] = [];
       res.on('data', (c: Buffer) => chunks.push(c));
       res.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf8');
+        const status = res.statusCode ?? 0;
+
         try {
-          resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+          const parsed = JSON.parse(body) as Record<string, unknown> | unknown[];
+          if (status >= 400) {
+            const detail = !Array.isArray(parsed) && parsed
+              ? String(parsed['msg'] ?? parsed['message'] ?? body.slice(0, 200))
+              : body.slice(0, 200);
+            reject(new Error(`Binance API ${status}: ${detail}`));
+            return;
+          }
+          resolve(parsed);
         } catch (e) {
+          if (status >= 400) {
+            reject(new Error(`Binance API ${status}: ${body.slice(0, 200)}`));
+            return;
+          }
           reject(new Error(`JSON parse error: ${(e as Error).message}`));
         }
       });
@@ -100,6 +120,9 @@ export async function fetchKlines(
   const sym = symbol.toUpperCase();
   const url = `${BASE}/api/v3/klines?symbol=${sym}&interval=${interval}&limit=${limit}`;
   const raw = await httpsGet(url) as unknown[][];
+  if (!Array.isArray(raw)) {
+    throw new Error(`Unexpected Binance kline payload for ${sym}`);
+  }
 
   return raw.map((k) => ({
     openTime:  Number(k[0]),
@@ -119,6 +142,9 @@ export async function fetchTicker(symbol: string): Promise<Ticker24h> {
   const sym = symbol.toUpperCase();
   const url = `${BASE}/api/v3/ticker/24hr?symbol=${sym}`;
   const raw = await httpsGet(url) as Record<string, string | number>;
+  if (Array.isArray(raw) || raw == null) {
+    throw new Error(`Unexpected Binance ticker payload for ${sym}`);
+  }
 
   return {
     symbol:           String(raw['symbol']),
@@ -154,6 +180,9 @@ export async function fetchOrderBook(symbol: string, limit = 20): Promise<OrderB
     bids: [string, string][];
     asks: [string, string][];
   };
+  if (!raw || !Array.isArray(raw.bids) || !Array.isArray(raw.asks)) {
+    throw new Error(`Unexpected Binance order book payload for ${sym}`);
+  }
 
   return {
     symbol: sym,

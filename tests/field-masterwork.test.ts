@@ -24,6 +24,7 @@ describe('field masterwork', () => {
     expect(masterwork?.format).toBe('market-playbook');
     expect(masterwork?.rationale.length).toBeGreaterThan(0);
     expect(masterwork?.sections.map(section => section.label)).toContain('Narrative vs flow');
+    expect(masterwork?.sections.map(section => section.label)).toContain('Execution boundary');
     expect(masterwork?.rendered).toContain('Market Playbook');
     expect(masterwork?.rendered).toContain('Proof of power');
   });

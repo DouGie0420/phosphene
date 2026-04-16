@@ -35,6 +35,9 @@ describe('field composer', () => {
 
     expect(composition?.field).toBe('market');
     expect(composition?.fullDraft).toContain('This thesis fails here');
+    expect(composition?.beats.map(beat => beat.label)).toEqual(
+      expect.arrayContaining(['Research map', 'Validation lattice', 'Trigger map', 'Confidence', 'Execution boundary'])
+    );
   });
 
   test('adds contradiction content to normal composition drafts', () => {
