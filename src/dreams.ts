@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'fs';
 import { homedir }  from 'os';
 import { join, relative, resolve as resolvePath } from 'path';
-import { generateDreamImage, pollinationsUrl } from './image-gen.js';
+import { detectArtemisVisualConfig, generateDreamImage, pollinationsUrl } from './image-gen.js';
 import { deriveBiasCandidates, detectHumanPatterns } from './contradiction-engine.js';
 import { PRESETS } from './presets.js';
 import type {
@@ -37,8 +37,8 @@ const DREAM_PROMPT_REVISION = 3;
 // ─── Path resolution ──────────────────────────────────────────────────────────
 
 export function resolveDreamsDir(): string {
-  const mylaudeDir = join(process.cwd(), '.mylaude', 'dreams');
-  if (existsSync(join(process.cwd(), '.mylaude'))) return mylaudeDir;
+  const artemisDir = join(process.cwd(), '.artemis', 'dreams');
+  if (existsSync(join(process.cwd(), '.artemis'))) return artemisDir;
   const hermesDir = join(homedir(), '.hermes', 'dreams');
   if (existsSync(join(homedir(), '.hermes'))) return hermesDir;
   return join(process.cwd(), 'dreams');
@@ -846,14 +846,23 @@ function updateDreamGallery(dir: string): void {
  */
 export async function generateDreamImages(
   dream: DreamRecord,
-  config: DreamImageConfig = { provider: 'pollinations' },
+  config: DreamImageConfig = { provider: 'artemis' },
   dreamsDir?: string,
 ): Promise<DreamRecord> {
   if (config.provider === 'none') return dream;
 
+  const provider = config.provider ?? 'artemis';
+  if (provider === 'artemis') {
+    const visualStatus = detectArtemisVisualConfig();
+    if (!visualStatus.available) {
+      console.warn(`[phosphene-dreams] Artemis visual model not configured; skipping dream image generation. ${visualStatus.reason}`);
+      return dream;
+    }
+  }
+
   const dir    = dreamsDir ?? resolveDreamsDir();
   const imgDir = config.imageOutputDir ?? join(dir, 'images');
-  const needsLocalFiles = config.provider !== 'pollinations' || config.download !== false;
+  const needsLocalFiles = provider !== 'pollinations' || config.download !== false;
   if (needsLocalFiles) {
     mkdirSync(imgDir, { recursive: true });
   }
@@ -861,12 +870,12 @@ export async function generateDreamImages(
   const updatedDream = {
     ...dream,
     imagePaths: { ...dream.imagePaths },
-    imageBackend: config.provider ?? 'pollinations',
+    imageBackend: provider,
     imageModel: resolveDreamImageModel(config),
   };
 
   for (const fragment of dream.fragments) {
-    const ext = config.provider === 'pollinations' && config.download !== false ? 'jpg' : 'png';
+    const ext = provider === 'pollinations' && config.download !== false ? 'jpg' : 'png';
     const filename = `${dream.id}-f${fragment.order}.${ext}`;
     const outputPath = needsLocalFiles ? join(imgDir, filename) : undefined;
     const fragmentSeed = createDreamImageSeed(dream.id, fragment.order);
@@ -882,7 +891,7 @@ export async function generateDreamImages(
       updatedDream.imagePaths[fragment.order] = result.path;
       updatedDream.hasImages = true;
     } catch (err) {
-      if (config.provider === 'pollinations' && config.download !== false) {
+      if (provider === 'pollinations' && config.download !== false) {
         try {
           const fallback = await generateDreamImage(
             fragment.imagePrompt,
@@ -1356,10 +1365,12 @@ function hasDreamSignature(content: string): boolean {
 }
 
 function resolveDreamImageModel(config: DreamImageConfig): string | null {
-  const provider = config.provider ?? 'pollinations';
+  const provider = config.provider ?? 'artemis';
   if (config.model) return config.model;
 
   switch (provider) {
+    case 'artemis':
+      return config.model ?? 'configured-visual-api';
     case 'pollinations':
       return 'flux';
     case 'hf':

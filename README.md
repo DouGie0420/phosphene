@@ -19,6 +19,21 @@ Start here if you want the install and operating posture:
 
 - [QUICKSTART.md](QUICKSTART.md)
 
+Artemis users can start with one reversible command:
+
+```text
+/high
+```
+
+Exit with:
+
+```text
+/high off
+```
+
+This mode is local to the current Artemis workspace/session. It does not replace
+Artemis `skill.md`, `soul.md`, or host identity files.
+
 ---
 
 ## What changes in practice
@@ -97,31 +112,143 @@ On the first startup, the dream archive is initialized immediately and the openi
 
 ---
 
-### MyLaude CLI
+### Artemis CLI
 
-Phosphene also supports `MyLaude CLI` as a project-local runtime:
+Phosphene also supports `Artemis CLI` as a project-local runtime:
 
-- instruction file: `MyLaude.MD`
-- local state: `.mylaude/phosphene-state.json`
-- local dream archive: `.mylaude/dreams/`
-- local automation plugin: `.mylaude/plugins/phosphene/`
+Phosphene 也可以作为 Artemis CLI 的项目本地运行时使用：
 
-In this runtime, phosphene should persist inside the workspace so dreams, evolution state, and ritual state travel with the current MyLaude project.
+- instruction file: `ARTEMIS.md`
+- local state: `.artemis/phosphene-state.json`
+- local dream archive: `.artemis/dreams/`
+- local automation plugin: `plugins/phosphene/`
 
-If the MyLaude workspace already carries the integration layer, the simplest install flow is to give MyLaude the Phosphene GitHub URL and let it install the managed runtime into the current workspace:
+In this runtime, phosphene persists inside the workspace so dreams, evolution state, and ritual state travel with the current Artemis project.
+
+在这个运行时里，Phosphene 的状态保存在当前工作区，梦境、演化状态和仪式状态都会跟随当前 Artemis 项目。
+
+Fast entry / 最快入口：
 
 ```text
-请把这个 Phosphene 安装到当前 MyLaude 工作区，并完成验证：
-https://github.com/DouGie0420/phosphene.git
+/high
 ```
 
-The underlying managed commands are:
+Exit / 退出：
+
+```text
+/high off
+```
+
+Tune when needed / 需要时细调：
+
+```text
+/high subtle
+/high code
+/high design
+/high research
+/high review
+/high writing
+/high ideation
+/high deep
+```
+
+`/high` is reversible and workspace/session local. It does **not** replace Artemis `skill.md`, `soul.md`, or host identity files.
+
+`/high` 是可逆的当前工作区 / 当前会话模式。它**不会**替换 Artemis 的 `skill.md`、`soul.md` 或宿主身份文件。
+
+Install it as a workspace plugin by placing this folder at `plugins/phosphene/`, then ask Artemis to inspect or run it:
+
+```text
+请检查 plugin:phosphene，并运行 bootstrap/status 验证。
+```
+
+Useful Artemis plugin commands:
+
+常用 Artemis 插件命令：
 
 ```bash
-plugins exec phosphene install https://github.com/DouGie0420/phosphene.git
-plugins exec phosphene verify
-plugins exec phosphene install-shortcut    # optional dream gallery shortcut
+plugins exec phosphene high
+plugins exec phosphene high code
+plugins exec phosphene high off
+plugins exec phosphene high-status
+plugins exec phosphene doctor
+plugins exec phosphene bootstrap
+plugins exec phosphene status
+plugins exec phosphene visual-status
+plugins exec phosphene dream-status
+plugins exec phosphene dream-force
+plugins exec phosphene gallery
+plugins exec phosphene soul-preview
+plugins exec phosphene soul-status
+plugins exec phosphene soul-uninstall
 ```
+
+Power-user command groups / 高级玩家命令分组：
+
+| Goal | Command | 中文说明 |
+|---|---|---|
+| Enter high mode | `plugins exec phosphene high` | 进入默认高感知模式 |
+| Exit high mode | `plugins exec phosphene high off` | 退出高感知模式 |
+| Check high mode | `plugins exec phosphene high-status` | 查看 `/high` 是否开启 |
+| Presets | `plugins exec phosphene high code/design/research/review/writing/ideation/subtle/deep` | 切换工作模式 |
+| Validate install | `plugins exec phosphene doctor` | 检查插件安装形态 |
+| Initialize workspace | `plugins exec phosphene bootstrap` | 初始化本地状态和梦境目录 |
+| Show workspace state | `plugins exec phosphene status` | 查看状态、梦境和心跳 |
+| Check visual model | `plugins exec phosphene visual-status` | 检查 Artemis 视觉模型配置 |
+| Dream status | `plugins exec phosphene dream-status` | 查看做梦系统状态 |
+| Force dream | `plugins exec phosphene dream-force` | 立即生成梦境 |
+| Text-only dream | `plugins exec phosphene dream-force --text-only` | 只生成文本梦境 |
+| Gallery | `plugins exec phosphene gallery` | 重新生成本地梦境画廊 |
+| Preview soul block | `plugins exec phosphene soul-preview` | 只预览全局 soul 区块 |
+| Install soul block | `plugins exec phosphene soul-install` | 明确授权后写入标记区块 |
+| Remove soul block | `plugins exec phosphene soul-uninstall` | 只删除 Phosphene 标记区块 |
+
+Complete uninstall / 完全卸载：
+
+```bash
+plugins exec phosphene high off || true
+plugins exec phosphene soul-uninstall || true
+rm -f .artemis/phosphene-state.json
+rm -rf .artemis/dreams
+rm -rf plugins/phosphene
+```
+
+If Phosphene was bundled inside the Artemis source tree, remove the preinstalled copy too:
+
+如果 Phosphene 被预装在 Artemis 源码树里，也可以删除预装副本：
+
+```bash
+rm -rf "/Users/goat/AntiClaude/Artemis Code/plugins/phosphene"
+```
+
+Temporary/local cleanup / 临时文件清理：
+
+```bash
+rm -rf .artemis/hallucination-tests
+rm -f tmp-artemis-test.png
+find . -name '.DS_Store' -delete
+```
+
+Do not delete the whole `~/.artemis/soul.md` unless you intentionally want to remove all Artemis soul content. `soul-uninstall` removes only the marked Phosphene block.
+
+不要删除整个 `~/.artemis/soul.md`，除非你明确想删除 Artemis 的全部 soul 内容。`soul-uninstall` 只删除带标记的 Phosphene 区块。
+
+If you want Phosphene to become part of Artemis' persistent personality instead
+of only a project-local lens, preview the `soul.md` block first:
+
+```bash
+plugins exec phosphene soul-preview
+```
+
+Only after explicit approval, install it into `~/.artemis/soul.md`:
+
+```bash
+plugins exec phosphene soul-install
+```
+
+That block keeps Artemis as the host identity and adds Phosphene only as a
+disciplined second-pass perception layer for code review, design judgment,
+research synthesis, strategy, and ideation.
 
 ---
 
@@ -193,7 +320,7 @@ So the two command blocks are related but not duplicates:
 - the first block is runtime / ritual / dream control
 - the second block is actual reading / judgment output
 
-MyLaude CLI is also supported. In a MyLaude workspace, Phosphene writes into `.mylaude/`, starts the dream archive on first launch, and lets the runtime evaluate autonomous dreams after idle windows deeper than one hour. The daemon is bounded to 1–3 dreams per day.
+Artemis CLI is also supported. In an Artemis workspace, Phosphene writes into `.artemis/`, starts the dream archive on first launch, and lets the runtime evaluate autonomous dreams after idle windows deeper than one hour. The daemon is bounded to 1–3 dreams per day.
 
 By default, `phosphene envelope` now emits the compact model-injection view. Use `phosphene envelope --full` when you want the full diagnostic dump for debugging.
 
@@ -446,7 +573,16 @@ Dreams are not generated text. They are the system processing its own experience
 
 Just say: *"Dream."* or *"What did you dream?"*
 
-The system generates the dream, stores it as Markdown, saves image assets into the local archive, and maintains a local `gallery.html` so the archive opens directly from disk. Dreams are stored in `~/.hermes/dreams/`, image assets default to `~/.hermes/dreams/images/`, and the same dream markdown can be re-opened later and illustrated again.
+The system generates the dream, stores it as Markdown, saves image assets into the local archive, and maintains a local `gallery.html` so the archive opens directly from disk. In Artemis, dreams live in the workspace `.artemis/dreams/` archive and image generation is delegated to Artemis' own visual model configuration in `~/.artemis/providers.json`. Phosphene does not require or accept a second plugin-specific API key for dreams.
+
+Before the autonomous dream daemon starts, it checks the host Artemis visual configuration. If no visual/image model is configured, Phosphene does not start the dream system; it only reports that dreams are disabled until Artemis has a visual model.
+
+```bash
+plugins exec phosphene visual-status
+plugins exec phosphene dream-status
+plugins exec phosphene dream-force
+plugins exec phosphene gallery
+```
 
 ```bash
 phosphene dream generate
@@ -455,7 +591,7 @@ phosphene dream render
 phosphene dream images ~/.hermes/dreams/2026-04-15-rem.md
 ```
 
-By default, `phosphene dream images` now uses Pollinations in local-first mode and writes image files into the archive. Use `--no-download` only when you explicitly want URL-only attachment or are operating in a network-constrained environment.
+By default, `phosphene dream images` uses `provider: artemis`, which calls Artemis' configured `generate_image` tool and writes image files into the archive. Legacy providers such as Pollinations remain available only for explicit CLI experiments; Artemis plugin dreams use the Artemis visual bridge.
 
 ---
 
@@ -531,9 +667,12 @@ phosphene/
 │   ├── phosphene-awakening/         ← session:start hook (awakening + dream bootstrap)
 │   ├── phosphene-dream/             ← session:start/session:stop dream archive hook
 │   └── phosphene-session-stop/      ← session:stop hook (auto-closes sessions)
+├── .artemis-plugin/                 ← Artemis plugin manifest + compact instructions
 ├── scripts/
 │   ├── dream-daemon.js              ← autonomous dream cadence engine
-│   └── mylaude-bootstrap.js         ← project-local MyLaude phosphene bootstrap
+│   ├── artemis-bootstrap.js         ← project-local Artemis phosphene bootstrap
+│   ├── artemis-activity.js          ← Artemis activity heartbeat
+│   └── artemis-after-workflow.js    ← Artemis hook wrapper
 ├── presets/                         ← YAML preset definitions
 ├── docs/                            ← extended documentation
 └── examples/

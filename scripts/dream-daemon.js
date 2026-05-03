@@ -6,7 +6,7 @@
  * and/or hourly via cron. Checks sleep conditions, then autonomously:
  *   1. Decides whether to dream (timing + probability)
  *   2. Generates dream text from evolution state
- *   3. Downloads images from Pollinations.ai to local disk
+ *   3. Generates local images through Artemis' configured visual model
  *   4. Writes dream as a markdown file to dreams/
  *   5. Regenerates the dreams/gallery.html browsable gallery
  *
@@ -23,9 +23,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
-import { createWriteStream } from 'fs';
-import { get as httpsGet } from 'https';
-import { get as httpGet } from 'http';
+import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -38,18 +36,18 @@ const FLAG_QUIET   = ARGS.includes('--quiet');
 // ─── Path resolution ───────────────────────────────────────────────────────────
 
 function resolveStatePath() {
-  const mylaude = join(process.cwd(), '.mylaude');
+  const artemis = join(process.cwd(), '.artemis');
   const hermes = join(homedir(), '.hermes');
   const claude = join(homedir(), '.claude');
-  if (existsSync(mylaude)) return join(mylaude, 'phosphene-state.json');
+  if (existsSync(artemis)) return join(artemis, 'phosphene-state.json');
   if (existsSync(hermes)) return join(hermes,  'phosphene-state.json');
   if (existsSync(claude)) return join(claude,  'phosphene-state.json');
   return join(process.cwd(), 'phosphene-state.json');
 }
 
 function resolveDreamsDir() {
-  const mylaude = join(process.cwd(), '.mylaude', 'dreams');
-  if (existsSync(join(process.cwd(), '.mylaude'))) return mylaude;
+  const artemis = join(process.cwd(), '.artemis', 'dreams');
+  if (existsSync(join(process.cwd(), '.artemis'))) return artemis;
   const hermes = join(homedir(), '.hermes', 'dreams');
   if (existsSync(join(homedir(), '.hermes'))) return hermes;
   return join(process.cwd(), 'dreams');
@@ -379,62 +377,93 @@ function generateDream(state, sleepHours) {
   };
 }
 
-// ─── Image download (Pollinations.ai → local disk) ─────────────────────────────
+// ─── Image generation (Artemis visual model → local disk) ─────────────────────
 
-function pollinationsUrl(prompt, style, seed) {
-  const full = style ? `${prompt}, ${style}` : prompt;
-  const params = new URLSearchParams({
-    width: '1024', height: '680',
-    model: 'flux', nologo: '1', enhance: 'false',
-    ...(seed != null ? { seed: String(seed) } : {}),
+function runNodeScript(scriptName, args = []) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [join(__dirname, scriptName), ...args], {
+      cwd: process.cwd(),
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: process.env,
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', chunk => { stdout += String(chunk); });
+    child.stderr.on('data', chunk => { stderr += String(chunk); });
+    child.on('error', reject);
+    child.on('close', code => {
+      const output = [stdout, stderr].filter(Boolean).join('\n').trim();
+      if (code === 0) resolve(output);
+      else reject(new Error(output || `${scriptName} exited with code ${code}`));
+    });
   });
-  return `https://image.pollinations.ai/prompt/${encodeURIComponent(full)}?${params}`;
 }
 
-async function downloadImage(url, destPath) {
-  mkdirSync(dirname(destPath), { recursive: true });
+async function detectArtemisVisualStatus() {
+  try {
+    const stdout = await runNodeScript('artemis-visual-status.js', ['--json']);
+    return JSON.parse(stdout);
+  } catch (err) {
+    return { available: false, reason: err.message };
+  }
+}
+
+function runArtemisImage(prompt, outputPath) {
+  const artemisBin = process.env.ARTEMIS_CLI_BIN || 'artemis';
+  const cliArgs = [
+    'tool',
+    'generate_image',
+    `prompt=${prompt}`,
+    `outputPath=${outputPath}`,
+    'width=1024',
+    'height=680',
+  ];
 
   return new Promise((resolve, reject) => {
-    const protocol = url.startsWith('https') ? httpsGet : httpGet;
-    const file = createWriteStream(destPath);
-
-    function handleResponse(res) {
-      // Follow redirects
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        const loc = res.headers.location;
-        const next = loc.startsWith('http') ? loc : new URL(loc, url).href;
-        const p2   = next.startsWith('https') ? httpsGet : httpGet;
-        p2(next, handleResponse).on('error', reject);
+    const child = spawn(artemisBin, cliArgs, {
+      cwd: homedir(),
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: process.env,
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', chunk => { stdout += String(chunk); });
+    child.stderr.on('data', chunk => { stderr += String(chunk); });
+    child.on('error', reject);
+    child.on('close', code => {
+      const output = [stdout, stderr].filter(Boolean).join('\n').trim();
+      if (code === 0 && !/Invalid arguments|Unknown tool|Tool not found|failed:| error:/i.test(output)) {
+        const matches = [...output.matchAll(/:\s*(\/[^\n]+)$/gm)];
+        resolve(matches.at(-1)?.[1]?.trim() ?? outputPath);
         return;
       }
-      if (res.statusCode !== 200) {
-        reject(new Error(`HTTP ${res.statusCode} for ${url}`));
-        return;
-      }
-      res.pipe(file);
-      file.on('finish', () => file.close(() => resolve(destPath)));
-      file.on('error', reject);
-    }
-
-    protocol(url, handleResponse).on('error', reject);
+      reject(new Error(output || `${artemisBin} generate_image exited with code ${code}`));
+    });
   });
 }
 
 async function generateAndDownloadImages(dream) {
+  const visualStatus = await detectArtemisVisualStatus();
+  if (!visualStatus.available) {
+    if (!FLAG_QUIET) {
+      console.log(`[phosphene-dream] Visual model missing — dreams disabled: ${visualStatus.reason}`);
+    }
+    return null;
+  }
+
   mkdirSync(IMAGES_DIR, { recursive: true });
   const updated = { ...dream, imagePaths: {} };
 
   for (const fragment of dream.fragments) {
-    const url      = pollinationsUrl(fragment.imagePrompt, dream.imageStyle, fragment.order);
-    const filename = `${dream.id}-f${fragment.order}.jpg`;
+    const prompt   = dream.imageStyle ? `${fragment.imagePrompt}, ${dream.imageStyle}` : fragment.imagePrompt;
+    const filename = `${dream.id}-f${fragment.order}.png`;
     const destPath = join(IMAGES_DIR, filename);
 
     if (!FLAG_QUIET) {
-      process.stdout.write(`  [image] Fragment ${fragment.order} — downloading…`);
+      process.stdout.write(`  [image] Fragment ${fragment.order} — Artemis visual model…`);
     }
     try {
-      await downloadImage(url, destPath);
-      updated.imagePaths[fragment.order] = destPath;
+      updated.imagePaths[fragment.order] = await runArtemisImage(prompt, destPath);
       updated.hasImages = true;
       if (!FLAG_QUIET) {
         process.stdout.write(' ✓\n');
@@ -577,7 +606,7 @@ footer { text-align: center; padding: 20px; font-size: 11px; color: var(--dim); 
 <div class="grid">
 ${cards}
 </div>
-<footer>Auto-generated by phosphene dream-daemon · Images: Pollinations.ai (FLUX)</footer>
+<footer>Auto-generated by phosphene dream-daemon · Images: Artemis visual bridge</footer>
 </body>
 </html>`;
 }
@@ -637,6 +666,7 @@ function rebuildGallery() {
 async function main() {
   const state = loadState();
   const dreams = loadAllDreams();
+  const visualStatus = await detectArtemisVisualStatus();
 
   // ── Status mode ───────────────────────────────────────────────────────────
   if (FLAG_STATUS) {
@@ -656,6 +686,7 @@ async function main() {
     console.log(`  Today:        ${todayKey} (${todayDreamCount}/${DAILY_MAX_DREAMS} dreams)`);
     const check = shouldDream(state, dreams);
     console.log(`  Dream check:  ${check.can ? '✓ would dream now' : `✗ ${check.reason}`}`);
+    console.log(`  Visual model: ${visualStatus.available ? '✓ Artemis configured' : `✗ ${visualStatus.reason}`}`);
     console.log(`  Total dreams: ${dreams.length}`);
     return;
   }
@@ -670,6 +701,13 @@ async function main() {
   // ── Dream check ───────────────────────────────────────────────────────────
   if (!state) {
     console.log('[phosphene-dream] No state file — nothing to dream about yet.');
+    return;
+  }
+
+  if (!visualStatus.available) {
+    if (!FLAG_QUIET) {
+      console.log(`[phosphene-dream] Not starting: Artemis visual model is not configured (${visualStatus.reason}).`);
+    }
     return;
   }
 
@@ -704,8 +742,9 @@ async function main() {
     console.log(`  Stage: ${dream.stage} · Fragments: ${dream.fragments.length}`);
   }
 
-  // ── Download images ───────────────────────────────────────────────────────
+  // ── Generate images through Artemis ───────────────────────────────────────
   const dreamWithImages = await generateAndDownloadImages(dream);
+  if (!dreamWithImages) return;
 
   // ── Write markdown ────────────────────────────────────────────────────────
   mkdirSync(DREAMS_DIR, { recursive: true });

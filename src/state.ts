@@ -1,7 +1,7 @@
 // Phosphene — persistent state adapter
 //
 // Priority order:
-//   1. MyLaude CLI    → ./.mylaude/phosphene-state.json
+//   1. Artemis CLI    → ./.artemis/phosphene-state.json
 //   2. Hermes Agent   → ~/.hermes/phosphene-state.json
 //   3. Claude Code    → ~/.claude/phosphene-state.json
 //   4. Local fallback → ./phosphene-state.json
@@ -25,6 +25,14 @@ export interface PhosphenePersistedState {
   sessionCount: number;
   firstInstalledAt: string | null;
   lastUpdated: string | null;
+  /** Workspace-local /high lens state. Never writes Artemis global soul/skill files. */
+  highMode: {
+    active: boolean;
+    preset: PresetName | 'custom' | 'clear';
+    activatedAt: string | null;
+    deactivatedAt: string | null;
+    source: string | null;
+  };
   /** The evolution record — grows across all sessions. */
   evolution: EvolutionState;
 }
@@ -40,6 +48,13 @@ const DEFAULT_STATE: PhosphenePersistedState = {
   sessionCount: 0,
   firstInstalledAt: null,
   lastUpdated: null,
+  highMode: {
+    active: false,
+    preset: 'clear',
+    activatedAt: null,
+    deactivatedAt: null,
+    source: null,
+  },
   evolution: DEFAULT_EVOLUTION,
 };
 
@@ -51,10 +66,10 @@ const DEFAULT_STATE: PhosphenePersistedState = {
  * Detection is purely filesystem-based — no env-var sniffing — so it works
  * regardless of how the process was launched.
  */
-export type PhospheneRuntime = 'hermes' | 'mylaude' | 'claude-code' | 'local';
+export type PhospheneRuntime = 'hermes' | 'artemis' | 'claude-code' | 'local';
 
 export function detectRuntime(): PhospheneRuntime {
-  if (existsSync(join(process.cwd(), '.mylaude'))) return 'mylaude';
+  if (existsSync(join(process.cwd(), '.artemis'))) return 'artemis';
   if (existsSync(join(homedir(), '.hermes'))) return 'hermes';
   if (existsSync(join(homedir(), '.claude')))  return 'claude-code';
   return 'local';
@@ -66,8 +81,8 @@ export function resolveStatePath(): string {
   if (runtime === 'hermes') {
     return join(homedir(), '.hermes', 'phosphene-state.json');
   }
-  if (runtime === 'mylaude') {
-    return join(process.cwd(), '.mylaude', 'phosphene-state.json');
+  if (runtime === 'artemis') {
+    return join(process.cwd(), '.artemis', 'phosphene-state.json');
   }
   if (runtime === 'claude-code') {
     return join(homedir(), '.claude', 'phosphene-state.json');
@@ -101,6 +116,10 @@ export function loadState(): PhosphenePersistedState {
     return {
       ...DEFAULT_STATE,
       ...parsed,
+      highMode: {
+        ...DEFAULT_STATE.highMode,
+        ...(parsed.highMode ?? {}),
+      },
       evolution: {
         ...DEFAULT_EVOLUTION,
         ...(parsed.evolution ?? {}),
@@ -265,6 +284,10 @@ export function describePersistedState(state: PhosphenePersistedState): string {
   }
 
   lines.push(`[phosphene: ${state.preset} — session ${state.sessionCount}]`);
+
+  if (state.highMode?.active) {
+    lines.push(`/high active: ${state.highMode.preset}`);
+  }
 
   if (state.activeVoices.length > 0) {
     lines.push(`voices: ${state.activeVoices.join(', ')}`);

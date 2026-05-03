@@ -300,6 +300,7 @@ export {
   pollinationsUrl,
   coverImageUrl,
   generateDreamImage,
+  generateDreamVideo,
 } from './image-gen.js';
 
 export { applySynesthesia }  from './synesthesia.js';

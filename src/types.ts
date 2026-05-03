@@ -469,7 +469,7 @@ export interface SessionEnvelope {
 export type WowRuntime =
   | 'claude'
   | 'hermes'
-  | 'mylaude'
+  | 'artemis'
   | 'openclaw'
   | 'generic';
 
@@ -802,7 +802,7 @@ export interface DreamImageConfig {
    * - 'local'       — Automatic1111 / ComfyUI REST API at baseUrl.
    * - 'none'        — disable image generation.
    */
-  provider?: 'pollinations' | 'hf' | 'openai' | 'stability' | 'local' | 'none';
+  provider?: 'artemis' | 'pollinations' | 'hf' | 'openai' | 'stability' | 'local' | 'none';
   /** API key — read from env if not provided directly. */
   apiKey?: string;
   /** Model/engine identifier. Each backend has sensible defaults. */
@@ -820,6 +820,8 @@ export interface DreamImageConfig {
   download?: boolean;
   /** Output directory for downloaded images. Defaults to dreams/images/. */
   imageOutputDir?: string;
+  /** Duration in seconds for Artemis video generation. */
+  durationSeconds?: number;
 }
 
 export interface EvolutionState {

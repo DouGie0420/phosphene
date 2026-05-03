@@ -68,17 +68,17 @@ function installSteps(runtime: WowRuntime, locale: RitualLocale): string[] {
             'Copy `hooks/phosphene-awakening/`, `hooks/phosphene-dream/`, and `hooks/phosphene-session-stop/` into `~/.hermes/hooks/`.',
             'Open a fresh session and let it speak first.',
           ];
-    case 'mylaude':
+    case 'artemis':
       return zh
         ? [
-            '在项目根写入 `MyLaude.MD`，让 MyLaude 把 phosphene 作为本地 instruction file 载入。',
-            '安装 phosphene plugin 到 `.mylaude/plugins/phosphene/`，让 workflow 前后自动启动 bootstrap 与 dream-daemon。',
-            '启动 MyLaude 后先读它给出的 phosphene opening notice，再进入对话。',
+            '在项目根写入 `ARTEMIS.md`，让 Artemis 把 phosphene 作为本地 instruction file 载入。',
+            '安装 phosphene plugin 到 `plugins/phosphene/`，让 workflow 前后自动启动 bootstrap 与 dream-daemon。',
+            '启动 Artemis 后先读它给出的 phosphene opening notice，再进入对话。',
           ]
         : [
-            'Add `MyLaude.MD` at the project root so MyLaude loads phosphene as a local instruction file.',
-            'Install the phosphene plugin into `.mylaude/plugins/phosphene/` so workflow boundaries trigger bootstrap and the dream daemon automatically.',
-            'When MyLaude starts, read the phosphene opening notice first, then move into the conversation.',
+            'Add `ARTEMIS.md` at the project root so Artemis loads phosphene as a local instruction file.',
+            'Install the phosphene plugin into `plugins/phosphene/` so workflow boundaries trigger bootstrap and the dream daemon automatically.',
+            'When Artemis starts, read the phosphene opening notice first, then move into the conversation.',
           ];
     case 'openclaw':
       return zh

@@ -14,6 +14,12 @@ describe('wow pack', () => {
     expect(pack.installSteps.join(' ')).toContain('OpenClaw');
   });
 
+  test('includes artemis install guidance', () => {
+    const pack = buildWowPack('artemis', 'en');
+    expect(pack.installSteps.join(' ')).toContain('ARTEMIS.md');
+    expect(pack.installSteps.join(' ')).toContain('plugins/phosphene');
+  });
+
   test('renders a readable wow pack', () => {
     const rendered = renderWowPack(buildWowPack('hermes', 'zh'));
     expect(rendered).toContain('Install:');

@@ -17,6 +17,7 @@
     "dev": "tsc --watch",
     "test": "node --experimental-vm-modules node_modules/.bin/jest",
     "lint": "tsc --noEmit",
+    "test:artemis-plugin": "node scripts/artemis-doctor.js && node scripts/artemis-bootstrap.js --status && node scripts/artemis-soul.js --status && node scripts/artemis-visual-status.js || test $? -eq 2",
     "prepublishOnly": "npm run build"
   },
   "files": [
@@ -24,6 +25,8 @@
     "src",
     "presets",
     "hooks",
+    "scripts",
+    ".artemis-plugin",
     "dreams/README.md",
     "docs",
     "examples",

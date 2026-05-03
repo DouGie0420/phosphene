@@ -203,6 +203,18 @@
   }
   #gallery-load-btn:hover { background: rgba(155,93,229,0.12); }
   #gallery-note { font-size: 10px; color: var(--text-dim); margin-left: auto; }
+  #artemis-bridge {
+    margin: 0 24px 10px;
+    padding: 10px 12px;
+    border: 1px solid rgba(5,217,200,0.22);
+    border-radius: 4px;
+    background: rgba(5,217,200,0.045);
+    font-size: 10px;
+    line-height: 1.55;
+    color: var(--text-dim);
+  }
+  #artemis-bridge strong { color: var(--glow-teal); font-weight: normal; }
+  #artemis-bridge code { color: var(--crystal); }
   #gallery-drop-zone {
     margin: 0 24px 10px;
     padding: 14px;
@@ -274,7 +286,7 @@
 </header>
 
 <div id="input-panel">
-  <textarea id="state-input" placeholder="Paste the contents of phosphene-state.json here, then click Render …&#10;&#10;(Find it at ~/.claude/phosphene-state.json  or  ~/.hermes/phosphene-state.json)"></textarea>
+  <textarea id="state-input" placeholder="Paste the contents of phosphene-state.json here, then click Render …&#10;&#10;(Find it at ./.artemis/phosphene-state.json, ~/.hermes/phosphene-state.json, or ~/.claude/phosphene-state.json)"></textarea>
   <div style="display:flex;flex-direction:column;gap:8px">
     <button class="btn" id="render-btn">Render</button>
     <button class="btn" id="demo-btn" style="border-color:var(--text-dim);color:var(--text-dim)">Demo</button>
@@ -297,7 +309,13 @@
       <span id="gallery-title">Dream Files</span>
       <label id="gallery-load-btn" for="dream-file-input">Load dreams folder</label>
       <input type="file" id="dream-file-input" accept=".md" multiple style="display:none">
-      <span id="gallery-note">drag &amp; drop dream .md files with local images, or let this page render remote image URLs directly</span>
+      <span id="gallery-note">drag &amp; drop Artemis dream .md files and generated local images</span>
+    </div>
+    <div id="artemis-bridge">
+      <strong>Artemis visual bridge:</strong>
+      this page does not generate images or read API keys. Run
+      <code>plugins exec phosphene visual-status</code> in Artemis; if a visual model is missing, the dream daemon stays asleep.
+      / 本页面不生成图片、不读取密钥；请在 Artemis 中运行 <code>plugins exec phosphene visual-status</code>，未配置视觉模型时做梦系统不会启动。
     </div>
     <div id="gallery-drop-zone">Drop dream markdown files here (from your dreams/ folder)</div>
     <div id="gallery-images" style="display:none"></div>

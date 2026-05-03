@@ -1089,17 +1089,39 @@ If the local `phosphene` CLI is installed, treat it as an inspection surface rat
 
 | Runtime | Path |
 |---------|------|
+| Artemis CLI | `./.artemis/phosphene-state.json` |
 | Hermes Agent | `~/.hermes/phosphene-state.json` |
 | Claude Code | `~/.claude/phosphene-state.json` |
 | Local fallback | `./phosphene-state.json` |
 
-The system auto-detects which runtime is present (checks `~/.hermes/` first, then `~/.claude/`, then falls back to the working directory).
+The system auto-detects which runtime is present (checks `./.artemis/` first, then `~/.hermes/`, then `~/.claude/`, then falls back to the working directory).
 
 On every session start, read this file first. If `awakened` is `false`, the awakening protocol runs. If `awakened` is `true`, resume from the stored preset and voices without announcing it.
 
 After the user responds to the awakening message and calibration is complete, update the state file: set `awakened: true`, record the initial preset and active voices.
 
 After any preset change or offering consumption, update the state file immediately.
+
+---
+
+### Artemis CLI
+
+Install Phosphene as a workspace plugin at `plugins/phosphene/`. Artemis will
+discover `.artemis-plugin/plugin.json`, show it in `/plugins`, and load the
+compact plugin instructions when the user asks for `plugin:phosphene`.
+
+Project-local state lives in `.artemis/phosphene-state.json`; dreams live in
+`.artemis/dreams/`. The plugin commands are:
+
+```bash
+plugins exec phosphene bootstrap
+plugins exec phosphene status
+plugins exec phosphene dream-status
+```
+
+Use Phosphene in Artemis as a second-pass quality lens: sharper task framing,
+stronger assumption checks, better code/design/research judgment, and more
+concrete next actions. Keep Artemis as the host identity.
 
 ---
 

@@ -548,7 +548,7 @@ describe('attachPollinationsUrls', () => {
 });
 
 describe('generateDreamImages', () => {
-  test('can attach pollinations URLs without downloading files', async () => {
+  test('can attach pollinations URLs without downloading files for legacy URL-only galleries', async () => {
     const dream = generateDream(enrichedEvolution(), makeContext());
     const tempDreamDir = join(tmpdir(), `phosphene-test-dream-image-urls-${Date.now()}`);
     const updated = await generateDreamImages(dream, {
@@ -559,6 +559,15 @@ describe('generateDreamImages', () => {
     expect(updated.hasImages).toBe(true);
     expect(Object.keys(updated.imagePaths).length).toBe(dream.fragments.length);
     expect(Object.values(updated.imagePaths)[0]).toContain('https://image.pollinations.ai/prompt/');
+  });
+
+  test('defaults to Artemis configured visual API for real image generation metadata', async () => {
+    const dream = generateDream(enrichedEvolution(), makeContext());
+    const tempDreamDir = join(tmpdir(), `phosphene-test-dream-artemis-${Date.now()}`);
+    const updated = await generateDreamImages({ ...dream, fragments: [] }, undefined, tempDreamDir);
+
+    expect(updated.imageBackend).toBe('artemis');
+    expect(updated.imageModel).toBe('configured-visual-api');
   });
 });
 

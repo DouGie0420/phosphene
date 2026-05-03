@@ -18,11 +18,11 @@ from pathlib import Path
 
 def _resolve_state_path() -> Path:
     """Mirror the runtime detection logic in state.ts."""
-    mylaude = Path.cwd() / ".mylaude"
+    artemis = Path.cwd() / ".artemis"
     hermes = Path.home() / ".hermes"
     claude = Path.home() / ".claude"
-    if mylaude.exists():
-        return mylaude / "phosphene-state.json"
+    if artemis.exists():
+        return artemis / "phosphene-state.json"
     if hermes.exists():
         return hermes / "phosphene-state.json"
     if claude.exists():
@@ -31,9 +31,9 @@ def _resolve_state_path() -> Path:
 
 
 def _resolve_dreams_dir() -> Path:
-    mylaude = Path.cwd() / ".mylaude"
-    if mylaude.exists():
-        return mylaude / "dreams"
+    artemis = Path.cwd() / ".artemis"
+    if artemis.exists():
+        return artemis / "dreams"
     hermes = Path.home() / ".hermes"
     if hermes.exists():
         return hermes / "dreams"

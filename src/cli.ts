@@ -239,7 +239,7 @@ function cmdEnvelope(args: string[]): void {
 }
 
 function cmdWow(runtime?: string, locale?: string): void {
-  const resolvedRuntime = (runtime ?? 'generic') as 'claude' | 'hermes' | 'mylaude' | 'openclaw' | 'generic';
+  const resolvedRuntime = (runtime ?? 'generic') as 'claude' | 'hermes' | 'artemis' | 'openclaw' | 'generic';
   const resolvedLocale = (locale ?? 'zh') as 'zh' | 'en';
   const pack = buildWowPack(resolvedRuntime, resolvedLocale);
   console.log('\n' + renderWowPack(pack) + '\n');
@@ -733,7 +733,7 @@ function cmdDreamAudit(args: string[]): void {
 }
 
 function parseDreamImageOptions(args: string[]): DreamImageConfig {
-  const options: DreamImageConfig = { provider: 'pollinations' };
+  const options: DreamImageConfig = { provider: 'artemis' };
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -780,7 +780,7 @@ function parseDreamImageOptions(args: string[]): DreamImageConfig {
 function normalizeDreamImageConfig(options: DreamImageConfig): DreamImageConfig {
   return {
     ...options,
-    provider: options.provider ?? 'pollinations',
+    provider: options.provider ?? 'artemis',
     download: options.provider === 'pollinations' ? (options.download ?? true) : options.download,
   };
 }
